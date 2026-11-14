@@ -3,10 +3,17 @@ name = "aemet-antarctica-api"
 version = "0.1.0"
 description = "Web API that retrieves, caches and aggregates Antarctic weather data from AEMET OpenData."
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "fastapi>=0.163.0",
+    "httpx>=0.28.1",
+    "uvicorn[standard]>=0.54.0",
+]
 
 [dependency-groups]
 dev = [
+    # Only used internally by Starlette's TestClient, which prefers httpx2 over httpx.
+    # Application code uses httpx (stable and supported by respx for mocking AEMET).
+    "httpx2>=2.16.0",
     "mypy>=2.4.1",
     "pytest>=9.2.0",
     "ruff>=0.17.5",
@@ -38,7 +45,7 @@ select = [
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["app"]
+files = ["app", "tests"]
 
 # ---------------------------------------------------------------------------
 # Pytest
