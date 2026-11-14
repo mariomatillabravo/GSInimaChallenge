@@ -1,0 +1,19 @@
+# Normalize line endings: text files are stored and checked out with LF on every OS,
+# so scripts, Dockerfiles and the Makefile behave the same on Windows and inside Linux containers.
+* text=auto eol=lf
+
+# Windows-only scripts need CRLF to run reliably in cmd.exe
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files: never convert or diff as text
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pdf binary
+*.db binary
+*.sqlite binary
+*.sqlite3 binary
