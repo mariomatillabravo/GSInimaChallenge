@@ -1,5 +1,7 @@
 # AEMET Antarctica Weather API
 
+[![CI](https://github.com/mariomatillabravo/GSInimaChallenge/actions/workflows/ci.yml/badge.svg)](https://github.com/mariomatillabravo/GSInimaChallenge/actions/workflows/ci.yml)
+
 Web API that retrieves, caches and aggregates weather data from the Spanish Antarctic stations
 (Juan Carlos I and Gabriel de Castilla) published by
 [AEMET OpenData](https://opendata.aemet.es/centrodedescargas/inicio).
