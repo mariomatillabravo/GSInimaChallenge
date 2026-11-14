@@ -1,0 +1,1 @@
+"""AEMET Antarctica weather API."""

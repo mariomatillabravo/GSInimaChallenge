@@ -1,0 +1,50 @@
+[project]
+name = "aemet-antarctica-api"
+version = "0.1.0"
+description = "Web API that retrieves, caches and aggregates Antarctic weather data from AEMET OpenData."
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "mypy>=2.4.1",
+    "pytest>=9.2.0",
+    "ruff>=0.17.5",
+]
+
+# ---------------------------------------------------------------------------
+# Ruff: linter and formatter (target Python version is inferred from requires-python)
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes: unused imports and variables, undefined names
+    "I",   # isort: import ordering
+    "B",   # flake8-bugbear: likely bugs and design problems
+    "UP",  # pyupgrade: modern Python syntax
+    "SIM", # flake8-simplify: simpler equivalent constructs
+    "DTZ", # flake8-datetimez: forbids naive datetimes
+    "PT",  # flake8-pytest-style: idiomatic pytest
+    "RUF", # Ruff-specific rules
+]
+
+# ---------------------------------------------------------------------------
+# Mypy: static type checking
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["app"]
+
+# ---------------------------------------------------------------------------
+# Pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
+filterwarnings = ["error"]
