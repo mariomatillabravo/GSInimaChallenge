@@ -31,6 +31,8 @@ The goal is to deliver everything. Work block by block: each block is finished, 
 
 Flag early if the plan does not fit the deadline. Anything left unfinished is listed as a TODO in the README, never delivered half-broken.
 
+Each completed block gets an annotated tag: `v0.1.0` (Part 1), `v0.2.0` (Part 2), `v0.3.0` (Part 3), `v1.0.0` (final delivery).
+
 ## Documentation
 
 - The README is living documentation: update it in the same step a decision is implemented, inside the relevant section. Explain what was decided and why (context, alternatives, reasoning, consequences).
@@ -45,12 +47,17 @@ Flag early if the plan does not fit the deadline. Anything left unfinished is li
 
 ## Settled decisions
 
-- **Stack**: Python + FastAPI.
+- **Stack**: Python 3.12 + FastAPI (backend, managed with uv); React + Vite + TypeScript (frontend, npm); Docker Compose.
+- **Concurrency model**: synchronous stack (`def` endpoints, sync `httpx.Client`, sync SQLAlchemy Core). Never call blocking code from an `async def` endpoint.
 - **Input time zone**: datetimes without an explicit time zone or offset are interpreted as `Europe/Madrid`. Every response states how the input was interpreted.
+- **DST input policy**: non-existent and ambiguous local times are rejected with HTTP 422; an explicit offset always disambiguates.
 - **Output time zone**: datetimes are returned in `Europe/Madrid` and always include the UTC offset (e.g. `+02:00`).
 - **Internal time handling**: always UTC with timezone-aware datetimes. Naive datetimes are never used.
-- **Data quality**: aggregated rows include a `samples` column with the number of measurements used (computed at query time, not stored).
-- **Demo mode**: the whole application runs without an AEMET API key.
+- **Aggregation**: daily and monthly buckets follow the station's local time; bucket labels are expressed in `Europe/Madrid`.
+- **Data quality**: aggregated rows include `samples`, `expected_samples` and `coverage` (computed at query time, not stored).
+- **Output fields**: JSON uses snake_case keys plus a `fields` block with the official labels; CSV export and UI use the official labels.
+- **Caching**: SQLite through SQLAlchemy Core, filled by fixed monthly UTC chunks; schema versioned with `PRAGMA user_version` (no Alembic).
+- **Demo mode**: the whole application runs without an AEMET API key, serving recorded AEMET responses through the same data-source interface as the real client.
 - **Commands**: a Makefile provides shortcuts; the README lists the full equivalent command for every target.
 
 ## Out of scope
