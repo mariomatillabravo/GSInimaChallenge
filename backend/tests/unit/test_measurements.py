@@ -1,11 +1,15 @@
 """Unit tests for measurement types and their presentation."""
 
+import pytest
+
+from app.core.exceptions import InvalidParameterError
 from app.domain.measurements import (
     DATETIME_LABEL,
     MEASUREMENT_FIELDS,
     STATION_LABEL,
     Aggregation,
     MeasurementType,
+    parse_measurement_types,
 )
 
 DEGREE_SIGN = "°"
@@ -47,3 +51,23 @@ def test_fields_map_to_aemet_names() -> None:
 
 def test_aggregation_values_match_the_public_api() -> None:
     assert [level.value for level in Aggregation] == ["none", "hourly", "daily", "monthly"]
+
+
+@pytest.mark.parametrize("values", [None, [], [""], [" , "]])
+def test_no_types_means_all_types(values: list[str] | None) -> None:
+    assert parse_measurement_types(values) == tuple(MeasurementType)
+
+
+def test_types_follow_the_canonical_order_without_duplicates() -> None:
+    parsed = parse_measurement_types(["Speed, temperature", "speed"])
+
+    assert parsed == (MeasurementType.TEMPERATURE, MeasurementType.SPEED)
+
+
+def test_unknown_types_are_rejected_with_the_valid_list() -> None:
+    with pytest.raises(InvalidParameterError) as excinfo:
+        parse_measurement_types(["temperature,humidity"])
+
+    assert excinfo.value.parameter == "types"
+    assert "humidity" in excinfo.value.message
+    assert "temperature, pressure, speed" in excinfo.value.message

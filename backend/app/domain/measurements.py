@@ -1,10 +1,13 @@
 """Measurement types, aggregation levels and how measurements are named for clients."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Final
+
+from app.core.exceptions import InvalidParameterError
 
 
 class Aggregation(StrEnum):
@@ -55,6 +58,31 @@ MEASUREMENT_FIELDS: Final[MappingProxyType[MeasurementType, MeasurementField]] =
 
 STATION_LABEL: Final = "Station"
 DATETIME_LABEL: Final = "Datetime"
+PERIOD_LABEL: Final = "Period"
+SAMPLES_LABEL: Final = "Samples"
+EXPECTED_SAMPLES_LABEL: Final = "Expected samples"
+COVERAGE_LABEL: Final = "Coverage (%)"
+
+
+def parse_measurement_types(values: Sequence[str] | None) -> tuple[MeasurementType, ...]:
+    """Parse the ``types`` parameter: comma-separated and/or repeated; empty means all types.
+
+    The result follows the canonical order (temperature, pressure, speed) without duplicates,
+    so the columns of a response never depend on how the client wrote the parameter.
+
+    Raises:
+        InvalidParameterError: If a value is not a known measurement type.
+    """
+    requested = {part.strip().lower() for value in values or () for part in value.split(",")}
+    requested.discard("")
+    valid = {kind.value for kind in MeasurementType}
+    if unknown := sorted(requested - valid):
+        raise InvalidParameterError(
+            "types",
+            f"Unknown measurement type(s): {', '.join(unknown)}. "
+            f"Valid types: {', '.join(kind.value for kind in MeasurementType)}.",
+        )
+    return tuple(kind for kind in MeasurementType if not requested or kind.value in requested)
 
 
 @dataclass(frozen=True, slots=True)

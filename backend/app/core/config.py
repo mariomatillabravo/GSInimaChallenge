@@ -1,5 +1,6 @@
 """Typed application settings, read from environment variables and an optional ``.env`` file."""
 
+from pathlib import Path
 from typing import Self
 
 from pydantic import PositiveFloat, PositiveInt, SecretStr, field_validator, model_validator
@@ -19,6 +20,9 @@ class Settings(BaseSettings):
 
     demo_mode: bool = False
     """Serve recorded AEMET responses instead of calling the real API (no API key needed)."""
+
+    demo_data_dir: Path = Path("sample_data/demo")
+    """Folder with the recorded responses used in demo mode (relative to the backend folder)."""
 
     aemet_api_key: SecretStr | None = None
     """Personal AEMET OpenData API key. Never logged: ``SecretStr`` hides it in reprs."""

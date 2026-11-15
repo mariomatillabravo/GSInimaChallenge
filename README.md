@@ -6,6 +6,92 @@ Web API that retrieves, caches and aggregates weather data from the Spanish Anta
 (Juan Carlos I and Gabriel de Castilla) published by
 [AEMET OpenData](https://opendata.aemet.es/centrodedescargas/inicio).
 
+## API
+
+Interactive documentation is served at `/docs` (Swagger UI) and `/redoc` once the API is running.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /health` | Liveness check |
+| `GET /api/v1/stations` | Stations that can be queried, with their AEMET identifiers and local time |
+| `GET /api/v1/stations/{station_id}/measurements` | Time series of a station, optionally aggregated |
+
+### Measurement parameters
+
+| Parameter | Required | Description |
+|---|---|---|
+| `station_id` (path) | yes | `juan-carlos-i` or `gabriel-de-castilla` |
+| `start`, `end` | yes | Inclusive range, `YYYY-MM-DDTHH:MM:SS`, optionally with `Z` or an offset (`%2B02:00` in a URL) |
+| `tz` | no | Zone of `start`/`end` without offset: IANA name (`Europe/Berlin`) or offset. Default `Europe/Madrid` |
+| `aggregation` | no | `none` (default), `hourly`, `daily` or `monthly` |
+| `types` | no | `temperature`, `pressure`, `speed`, comma-separated or repeated. Default: all |
+
+### Example
+
+```bash
+curl "http://localhost:8000/api/v1/stations/juan-carlos-i/measurements?start=2026-01-15T00:00:00&end=2026-01-16T03:00:00&aggregation=daily&types=temperature,speed"
+```
+
+```json
+{
+  "metadata": {
+    "station": {"id": "juan-carlos-i", "name": "Juan Carlos I", "aemet_id": "89064", "aemet_name": "JCI Estacion meteorologica"},
+    "aggregation": "daily",
+    "start": "2026-01-15T00:00:00+01:00",
+    "end": "2026-01-16T03:00:00+01:00",
+    "input_interpretation": "Europe/Madrid (default)",
+    "output_timezone": "Europe/Madrid",
+    "station_timezone": "UTC-03:00",
+    "source": "aemet",
+    "count": 2
+  },
+  "fields": {
+    "station": {"label": "Station", "unit": null},
+    "datetime": {"label": "Datetime", "unit": null},
+    "period": {"label": "Period", "unit": null},
+    "temperature_c": {"label": "Temperature (°C)", "unit": "°C"},
+    "speed_ms": {"label": "Speed (m/s)", "unit": "m/s"},
+    "samples": {"label": "Samples", "unit": null},
+    "expected_samples": {"label": "Expected samples", "unit": null},
+    "coverage": {"label": "Coverage (%)", "unit": "%"}
+  },
+  "data": [
+    {"station": "Juan Carlos I", "datetime": "2026-01-14T04:00:00+01:00", "period": "2026-01-14", "temperature_c": 1.91, "speed_ms": 2.09, "samples": 18, "expected_samples": 144, "coverage": 12.5},
+    {"station": "Juan Carlos I", "datetime": "2026-01-15T04:00:00+01:00", "period": "2026-01-15", "temperature_c": 2.93, "speed_ms": 2.09, "samples": 127, "expected_samples": 144, "coverage": 88.2}
+  ]
+}
+```
+
+The example shows station-local days at work. Midnight in Madrid is 20:00 of the previous day at the station, so
+the requested range touches two station days. The first one only contributes its last three hours, which its
+`coverage` makes obvious.
+
+### Field names
+
+JSON keys are snake_case (`temperature_c`, `pressure_hpa`, `speed_ms`), which every client can use directly. The
+official dataset names required by the challenge (`Station`, `Datetime`, `Temperature (°C)`, `Pressure (hPa)`,
+`Speed (m/s)`) are given for every key in the `fields` block. The statement writes `ºC` (the ordinal indicator,
+not the degree sign) and `hpa`, copying AEMET's metadata; the correct symbols are used instead. A requested
+measurement without data is `null`; a measurement that was not requested is absent. See
+[ADR-0006](docs/adr/0006-output-field-names.md).
+
+### Errors
+
+Every error has the same shape, and the HTTP status tells whether the problem is in the request or upstream:
+
+```json
+{"error": {"code": "invalid_parameter", "message": "'2026-10-25T02:30:00' is ambiguous in Europe/Madrid: ...", "parameter": "start"}}
+```
+
+| Status | `code` | When |
+|---|---|---|
+| 422 | `invalid_parameter` | Malformed or inconsistent parameter, non-existent or ambiguous local time, range too long |
+| 404 | `not_found` | Unknown station (the message lists the valid ones) |
+| 502 | `upstream_error` | AEMET failed, rejected the API key or answered unexpectedly |
+| 503 | `upstream_unavailable` | AEMET is unreachable or rate limiting, even after retrying |
+| 504 | `upstream_timeout` | AEMET did not answer in time, even after retrying |
+| 500 | `internal_error` | Unexpected error; details stay in the server logs |
+
 ## Data source
 
 All weather data comes from the AEMET OpenData API (Spanish State Meteorological Agency), Antarctica endpoint, for
@@ -161,6 +247,8 @@ its context, the options considered and its consequences.
 | [0003](docs/adr/0003-dst-input-policy.md) | Non-existent and ambiguous local times are rejected with HTTP 422 instead of being guessed |
 | [0004](docs/adr/0004-aemet-client.md) | A `WeatherSource` port with an AEMET client and a recorded source sharing one pure parser; monthly windows, retries, data cleaning and upstream error classification |
 | [0005](docs/adr/0005-aggregation.md) | Buckets in station local time labelled in Madrid time, means of non-missing values, and `samples`, `expected_samples` and `coverage` on every aggregated row, empty buckets included |
+| [0006](docs/adr/0006-output-field-names.md) | snake_case JSON keys with a `fields` block holding the official labels, corrected unit symbols, readable station names |
+| [0007](docs/adr/0007-concurrency-model.md) | Synchronous request handling: SQLite and pandas block, so `def` endpoints in the thread pool are correct by construction |
 
 ## Development
 
@@ -178,6 +266,7 @@ git-ignored. To start, copy [`backend/.env.example`](backend/.env.example) to `b
 | Variable | Default | Description |
 |---|---|---|
 | `DEMO_MODE` | `false` | Serve recorded AEMET responses instead of calling the real API. No API key is needed. |
+| `DEMO_DATA_DIR` | `sample_data/demo` | Folder with the recorded responses used in demo mode, relative to `backend/` |
 | `AEMET_API_KEY` | none | Personal AEMET OpenData API key. Required when `DEMO_MODE` is `false`. |
 | `AEMET_BASE_URL` | `https://opendata.aemet.es/opendata` | AEMET OpenData base URL |
 | `AEMET_TIMEOUT_SECONDS` | `30` | Timeout of each HTTP request to AEMET |
