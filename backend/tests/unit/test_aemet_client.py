@@ -75,6 +75,33 @@ class TestTwoStepProtocol:
         assert envelope_route.calls.last.request.headers["api_key"] == "test-key"
         assert "api_key" not in data_route.calls.last.request.headers
 
+    def test_raw_records_are_returned_without_cleaning(
+        self, router: respx.MockRouter, client: AemetAntarcticaClient
+    ) -> None:
+        router.get(DAY_ENVELOPE).mock(return_value=envelope(200))
+        router.get(DATA_URL).respond(200, content=DAY_OF_DATA, headers=LATIN_TEXT)
+
+        records = client.fetch_raw_records(
+            STATION, utc("2026-01-15T00:00:00"), utc("2026-01-16T00:00:00")
+        )
+
+        partial = next(r for r in records if r["fhora"] == "2026-01-15T16:00:00Z")
+        assert len(records) == 145
+        assert partial["temp"] == "NaN"  # untouched: cleaning only happens in fetch()
+        assert partial["nombre"] == "JCI Estacion meteorologica"
+
+    def test_raw_records_of_a_window_without_data(
+        self, router: respx.MockRouter, client: AemetAntarcticaClient
+    ) -> None:
+        router.get(DAY_ENVELOPE).mock(return_value=envelope(404, "No hay datos"))
+
+        assert (
+            client.fetch_raw_records(
+                STATION, utc("2026-01-15T00:00:00"), utc("2026-01-16T00:00:00")
+            )
+            == []
+        )
+
     def test_no_data_is_an_empty_result(
         self, router: respx.MockRouter, client: AemetAntarcticaClient
     ) -> None:

@@ -1,14 +1,19 @@
 """Client for the AEMET OpenData Antarctica endpoint."""
 
 from datetime import UTC, datetime
-from typing import Final
+from typing import Any, Final
 
 import httpx
 from pydantic import SecretStr
 from tenacity import Retrying, retry_if_exception_type, stop_after_attempt, wait_exponential
 from tenacity.wait import wait_base
 
-from app.clients.aemet_parser import decode_body, parse_envelope, parse_observations
+from app.clients.aemet_parser import (
+    decode_body,
+    load_records,
+    parse_envelope,
+    parse_observations,
+)
 from app.core.exceptions import UpstreamError, UpstreamTimeoutError, UpstreamUnavailableError
 from app.domain.chunks import month_chunks
 from app.domain.measurements import Observation
@@ -69,15 +74,36 @@ class AemetAntarcticaClient:
         )
 
     def fetch(self, station: Station, start: datetime, end: datetime) -> list[Observation]:
-        """Return the observations of ``station`` in ``[start, end]``, sorted by time."""
+        """Return the cleaned observations of ``station`` in ``[start, end]``, sorted by time."""
         observations: list[Observation] = []
-        for chunk in month_chunks(start, end):
-            # Windows are disjoint and visited in order, so concatenating keeps the result sorted.
-            window_start, window_end = max(chunk.start, start), min(chunk.end, end)
-            observations.extend(self._fetch_window(station, window_start, window_end))
+        # Windows are disjoint and visited in order, so concatenating keeps the result sorted.
+        for window_start, window_end in _monthly_windows(start, end):
+            text = self._fetch_window(station, window_start, window_end)
+            if text is not None:
+                observations.extend(
+                    obs
+                    for obs in parse_observations(text).observations
+                    if window_start <= obs.timestamp <= window_end
+                )
         return observations
 
-    def _fetch_window(self, station: Station, start: datetime, end: datetime) -> list[Observation]:
+    def fetch_raw_records(
+        self, station: Station, start: datetime, end: datetime
+    ) -> list[dict[str, Any]]:
+        """Return the records exactly as AEMET serves them, without any cleaning.
+
+        Used by the script that records demo data, so that recordings go through the same
+        protocol, retries and error handling as live requests.
+        """
+        records: list[dict[str, Any]] = []
+        for window_start, window_end in _monthly_windows(start, end):
+            text = self._fetch_window(station, window_start, window_end)
+            if text is not None:
+                records.extend(load_records(text))
+        return records
+
+    def _fetch_window(self, station: Station, start: datetime, end: datetime) -> str | None:
+        """Body of the data response for one window, or ``None`` when AEMET has no data."""
         try:
             return self._retrying.copy()(self._fetch_window_once, station, start, end)
         except httpx.TimeoutException as error:
@@ -91,23 +117,19 @@ class AemetAntarcticaClient:
         except _ServerError as error:
             raise UpstreamError(f"AEMET failed with {error}.") from error
 
-    def _fetch_window_once(
-        self, station: Station, start: datetime, end: datetime
-    ) -> list[Observation]:
+    def _fetch_window_once(self, station: Station, start: datetime, end: datetime) -> str | None:
         url = self._base_url + _ENDPOINT.format(
             start=_url_date(start), end=_url_date(end), station=station.aemet_id
         )
         headers = {"api_key": self._api_key.get_secret_value()}
         envelope = parse_envelope(self._get_text(url, headers=headers))
         if envelope.status == _ESTADO_NO_DATA:
-            return []
+            return None
         if envelope.status == _ESTADO_RATE_LIMITED:
             raise _RateLimitedError
         if envelope.status != _ESTADO_OK or envelope.data_url is None:
             raise UpstreamError(f"AEMET answered estado {envelope.status}: {envelope.description}")
-
-        parsed = parse_observations(self._get_text(envelope.data_url))
-        return [obs for obs in parsed.observations if start <= obs.timestamp <= end]
+        return self._get_text(envelope.data_url)
 
     def _get_text(self, url: str, headers: dict[str, str] | None = None) -> str:
         response = self._http.get(url, headers=headers)
@@ -121,6 +143,11 @@ class AemetAntarcticaClient:
         if status != httpx.codes.OK:
             raise UpstreamError(f"Unexpected HTTP {status} from AEMET.")
         return decode_body(response.content, response.charset_encoding)
+
+
+def _monthly_windows(start: datetime, end: datetime) -> list[tuple[datetime, datetime]]:
+    """Split ``[start, end]`` into windows that never cross a calendar month (AEMET's limit)."""
+    return [(max(chunk.start, start), min(chunk.end, end)) for chunk in month_chunks(start, end)]
 
 
 def _url_date(instant: datetime) -> str:

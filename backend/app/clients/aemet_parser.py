@@ -70,13 +70,9 @@ def parse_observations(text: str) -> ParsedObservations:
     AEMET does not always sort the records, so they are sorted here. If a timestamp appears
     twice, the last record wins.
     """
-    payload = _load_json(text)
-    if not isinstance(payload, list):
-        raise UpstreamError("Unexpected AEMET data: expected a list of records.")
-
     by_timestamp: dict[datetime, Observation] = {}
     discarded = 0
-    for record in payload:
+    for record in _load_list(text):
         observation = _parse_record(record) if isinstance(record, dict) else None
         if observation is None:
             discarded += 1
@@ -84,6 +80,18 @@ def parse_observations(text: str) -> ParsedObservations:
             by_timestamp[observation.timestamp] = observation
     observations = [by_timestamp[timestamp] for timestamp in sorted(by_timestamp)]
     return ParsedObservations(observations=observations, discarded=discarded)
+
+
+def load_records(text: str) -> list[dict[str, Any]]:
+    """Return the records of a data response exactly as served, without any cleaning."""
+    return [record for record in _load_list(text) if isinstance(record, dict)]
+
+
+def _load_list(text: str) -> list[Any]:
+    payload = _load_json(text)
+    if not isinstance(payload, list):
+        raise UpstreamError("Unexpected AEMET data: expected a list of records.")
+    return payload
 
 
 def _parse_record(record: dict[str, Any]) -> Observation | None:

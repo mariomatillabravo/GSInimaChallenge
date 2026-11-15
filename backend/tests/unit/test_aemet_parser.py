@@ -8,6 +8,7 @@ import pytest
 
 from app.clients.aemet_parser import (
     decode_body,
+    load_records,
     parse_envelope,
     parse_observations,
 )
@@ -140,3 +141,14 @@ class TestDecoding:
     def test_data_that_is_not_a_list_is_an_upstream_error(self) -> None:
         with pytest.raises(UpstreamError):
             parse_observations('{"estado": 200}')
+
+
+class TestRawRecords:
+    def test_records_are_returned_as_served(self) -> None:
+        records = load_records(load("data_89064_2026-01-15_2026-01-16.json"))
+
+        assert len(records) == 145
+        assert records[0]["identificacion"] == "89064"
+
+    def test_entries_that_are_not_records_are_skipped(self) -> None:
+        assert load_records('[{"fhora": "x"}, 3, "text"]') == [{"fhora": "x"}]
