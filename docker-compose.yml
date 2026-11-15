@@ -1,0 +1,15 @@
+services:
+  api:
+    build: ./backend
+    image: aemet-antarctica-api
+    ports:
+      - "8000:8000"
+    # Optional: provides AEMET_API_KEY (and other settings) when running with real data.
+    env_file:
+      - path: backend/.env
+        required: false
+    environment:
+      # Demo mode by default, so `docker compose up` works without an API key.
+      # Use real data with: DEMO_MODE=false docker compose up
+      DEMO_MODE: ${DEMO_MODE:-true}
+    restart: unless-stopped

@@ -4,23 +4,29 @@
 BACKEND_RUN := uv run --directory backend
 
 .DEFAULT_GOAL := help
-.PHONY: help install run test lint format typecheck check
+.PHONY: help install run demo test lint format typecheck check up down
 
 help:
 	@echo "Available targets:"
 	@echo "  install    Install backend dependencies from the lockfile"
 	@echo "  run        Start the API with auto-reload on http://localhost:8000"
+	@echo "  demo       Start the API in demo mode (recorded data, no API key needed)"
 	@echo "  test       Run the backend test suite"
 	@echo "  lint       Check linting and formatting"
 	@echo "  format     Apply safe lint fixes and format the code"
 	@echo "  typecheck  Run static type checking"
 	@echo "  check      Run lint, typecheck and test (what CI runs)"
+	@echo "  up         Build and start the Docker stack (demo mode by default)"
+	@echo "  down       Stop the Docker stack"
 
 install:
 	uv sync --locked --directory backend
 
 run:
 	$(BACKEND_RUN) uvicorn app.main:create_app --factory --reload
+
+demo:
+	DEMO_MODE=true $(BACKEND_RUN) uvicorn app.main:create_app --factory --reload
 
 test:
 	$(BACKEND_RUN) pytest
@@ -37,3 +43,9 @@ typecheck:
 	$(BACKEND_RUN) mypy
 
 check: lint typecheck test
+
+up:
+	docker compose up --build
+
+down:
+	docker compose down

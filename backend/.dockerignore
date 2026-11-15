@@ -1,0 +1,21 @@
+# Secrets must never end up in an image
+.env
+.env.*
+
+# Local environments, caches and build artefacts
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+htmlcov/
+
+# Not needed at runtime
+tests/
+scripts/
+sample_data/raw/
+*.db
+*.db-*

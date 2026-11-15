@@ -283,7 +283,8 @@ its context, the options considered and its consequences.
 
 ### Prerequisites
 
-- Python 3.12 and [uv](https://docs.astral.sh/uv/).
+- Python 3.12 and [uv](https://docs.astral.sh/uv/), or only [Docker](https://docs.docker.com/get-docker/)
+  to run the stack.
 - GNU Make (optional). Every target is a shortcut for the plain command listed below.
   On Windows it can be installed with `winget install ezwinports.make`.
 
@@ -320,8 +321,11 @@ Run them from the repository root.
 |---|---|---|
 | `make install` | `uv sync --locked --directory backend` | Install backend dependencies exactly as pinned in `uv.lock` |
 | `make run` | `uv run --directory backend uvicorn app.main:create_app --factory --reload` | Start the API with auto-reload on <http://localhost:8000> (interactive docs at `/docs`) |
+| `make demo` | Bash: `DEMO_MODE=true uv run --directory backend uvicorn app.main:create_app --factory --reload`<br>PowerShell: `$env:DEMO_MODE="true"; uv run --directory backend uvicorn app.main:create_app --factory --reload` | Same as `run`, in demo mode (recorded data, no API key needed) |
 | `make test` | `uv run --directory backend pytest` | Run the backend test suite |
 | `make lint` | `uv run --directory backend ruff check .`<br>`uv run --directory backend ruff format --check .` | Check linting and formatting without changing files |
 | `make format` | `uv run --directory backend ruff check --fix --exit-zero .`<br>`uv run --directory backend ruff format .` | Apply safe lint fixes, then format the code (remaining lint issues are reported by `make lint`) |
 | `make typecheck` | `uv run --directory backend mypy` | Static type checking in strict mode |
 | `make check` | The `lint`, `typecheck` and `test` commands above | Everything CI runs |
+| `make up` | `docker compose up --build` | Build and start the Docker stack (demo mode by default) |
+| `make down` | `docker compose down` | Stop the Docker stack |
