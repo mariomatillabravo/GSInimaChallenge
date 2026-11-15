@@ -20,7 +20,7 @@ install:
 	uv sync --locked --directory backend
 
 run:
-	$(BACKEND_RUN) uvicorn app.main:app --reload
+	$(BACKEND_RUN) uvicorn app.main:create_app --factory --reload
 
 test:
 	$(BACKEND_RUN) pytest

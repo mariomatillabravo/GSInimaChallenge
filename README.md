@@ -43,6 +43,20 @@ its context, the options considered and its consequences.
 - GNU Make (optional). Every target is a shortcut for the plain command listed below.
   On Windows it can be installed with `winget install ezwinports.make`.
 
+### Configuration
+
+The backend reads its configuration from environment variables or from a `backend/.env` file, which is
+git-ignored. To start, copy [`backend/.env.example`](backend/.env.example) to `backend/.env`.
+
+| Variable | Default | Description |
+|---|---|---|
+| `DEMO_MODE` | `false` | Serve recorded AEMET responses instead of calling the real API. No API key is needed. |
+| `AEMET_API_KEY` | none | Personal AEMET OpenData API key. Required when `DEMO_MODE` is `false`. |
+
+`DEMO_MODE` defaults to `false` on purpose: a deployment that forgets its API key refuses to start with a clear
+message, instead of silently serving demo data. The API key is held as a secret value that is never printed or
+logged.
+
 ### Commands
 
 Run them from the repository root.
@@ -50,7 +64,7 @@ Run them from the repository root.
 | Make target | Equivalent command | Purpose |
 |---|---|---|
 | `make install` | `uv sync --locked --directory backend` | Install backend dependencies exactly as pinned in `uv.lock` |
-| `make run` | `uv run --directory backend uvicorn app.main:app --reload` | Start the API with auto-reload on <http://localhost:8000> (interactive docs at `/docs`) |
+| `make run` | `uv run --directory backend uvicorn app.main:create_app --factory --reload` | Start the API with auto-reload on <http://localhost:8000> (interactive docs at `/docs`) |
 | `make test` | `uv run --directory backend pytest` | Run the backend test suite |
 | `make lint` | `uv run --directory backend ruff check .`<br>`uv run --directory backend ruff format --check .` | Check linting and formatting without changing files |
 | `make format` | `uv run --directory backend ruff check --fix .`<br>`uv run --directory backend ruff format .` | Apply safe lint fixes, then format the code |

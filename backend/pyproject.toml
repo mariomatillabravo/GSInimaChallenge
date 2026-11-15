@@ -6,6 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.163.0",
     "httpx>=0.28.1",
+    "pydantic-settings>=2.16.3",
     "uvicorn[standard]>=0.54.0",
 ]
 
@@ -46,6 +47,11 @@ select = [
 python_version = "3.12"
 strict = true
 files = ["app", "tests", "scripts"]
+# Teaches mypy how Pydantic models validate their input (e.g. str -> SecretStr, BaseSettings' _env_file).
+plugins = ["pydantic.mypy"]
+
+[tool.pydantic-mypy]
+init_forbid_extra = true  # a misspelled keyword argument in a model constructor is a type error
 
 # ---------------------------------------------------------------------------
 # Pytest
