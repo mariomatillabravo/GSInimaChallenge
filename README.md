@@ -16,6 +16,9 @@ Interactive documentation is served at `/docs` (Swagger UI) and `/redoc` once th
 | `GET /api/v1/stations` | Stations that can be queried, with their AEMET identifiers and local time |
 | `GET /api/v1/stations/{station_id}/measurements` | Time series of a station, optionally aggregated |
 
+Responses larger than 1 KB are gzip-compressed when the client accepts it: one day of raw data (145 rows) goes
+from 18.5 KB to 1.5 KB.
+
 ### Measurement parameters
 
 | Parameter | Required | Description |

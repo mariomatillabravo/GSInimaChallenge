@@ -12,6 +12,7 @@ from contextlib import ExitStack, asynccontextmanager
 
 import httpx
 from fastapi import FastAPI
+from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api.errors import register_error_handlers
 from app.api.routes import health, measurements, stations
@@ -40,6 +41,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=_lifespan,
     )
     app.state.settings = settings if settings is not None else Settings()
+    # Repetitive JSON compresses very well; tiny responses are not worth the CPU.
+    app.add_middleware(GZipMiddleware, minimum_size=1000)
     register_error_handlers(app)
     app.include_router(health.router)
     app.include_router(stations.router)
