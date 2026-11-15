@@ -30,7 +30,7 @@ lint:
 	$(BACKEND_RUN) ruff format --check .
 
 format:
-	$(BACKEND_RUN) ruff check --fix .
+	$(BACKEND_RUN) ruff check --fix --exit-zero .
 	$(BACKEND_RUN) ruff format .
 
 typecheck:

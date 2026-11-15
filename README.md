@@ -158,6 +158,6 @@ Run them from the repository root.
 | `make run` | `uv run --directory backend uvicorn app.main:create_app --factory --reload` | Start the API with auto-reload on <http://localhost:8000> (interactive docs at `/docs`) |
 | `make test` | `uv run --directory backend pytest` | Run the backend test suite |
 | `make lint` | `uv run --directory backend ruff check .`<br>`uv run --directory backend ruff format --check .` | Check linting and formatting without changing files |
-| `make format` | `uv run --directory backend ruff check --fix .`<br>`uv run --directory backend ruff format .` | Apply safe lint fixes, then format the code |
+| `make format` | `uv run --directory backend ruff check --fix --exit-zero .`<br>`uv run --directory backend ruff format .` | Apply safe lint fixes, then format the code (remaining lint issues are reported by `make lint`) |
 | `make typecheck` | `uv run --directory backend mypy` | Static type checking in strict mode |
 | `make check` | The `lint`, `typecheck` and `test` commands above | Everything CI runs |
