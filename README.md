@@ -21,8 +21,19 @@ two automatic weather stations:
 > *(© AEMET. Use and reproduction of the information is authorised provided AEMET is cited as its author.)*
 > See AEMET's [legal notice](https://www.aemet.es/es/nota_legal).
 
-The repository includes a few real AEMET responses as test fixtures; their origin is documented in
-[`backend/tests/fixtures/aemet/`](backend/tests/fixtures/aemet/README.md).
+The upstream behaviour the service relies on (two-step responses, errors reported in the body, one-month maximum
+range, `"NaN"` for missing values, data availability) was verified against the real API and is documented in
+[docs/aemet-api.md](docs/aemet-api.md). A few real responses are included as test fixtures; their origin is
+documented in [`backend/tests/fixtures/aemet/`](backend/tests/fixtures/aemet/README.md).
+
+## Design decisions
+
+Each significant decision is recorded as an Architecture Decision Record (ADR) in [`docs/adr/`](docs/adr/), with
+its context, the options considered and its consequences.
+
+| ADR | Decision |
+|---|---|
+| [0001](docs/adr/0001-web-framework.md) | FastAPI as the web framework: typed validation, generated OpenAPI docs and dependency injection that makes the AEMET client easy to replace in tests and demo mode |
 
 ## Development
 
