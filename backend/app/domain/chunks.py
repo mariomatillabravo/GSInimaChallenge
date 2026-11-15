@@ -20,6 +20,18 @@ class MonthChunk:
     """Last second of the month (the next month starts one second later)."""
 
 
+@dataclass(frozen=True, slots=True)
+class CachedChunk:
+    """What the cache knows about one month of one station."""
+
+    key: str
+    """Year and month, e.g. ``"2026-01"``, as in ``MonthChunk.key``."""
+    fetched_at: datetime
+    """When the month was fetched from the data source (aware, in UTC)."""
+    row_count: int
+    """Observations stored for the month; 0 means the source had no data (negative cache)."""
+
+
 def month_chunks(start: datetime, end: datetime) -> list[MonthChunk]:
     """Return every calendar month (in UTC) that overlaps the inclusive range ``[start, end]``."""
     if start.tzinfo is None or end.tzinfo is None:

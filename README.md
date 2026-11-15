@@ -328,6 +328,10 @@ the next step of Part 2 (see [Project status](#project-status)).
 - **Tables**: `measurements` (one row per station and ten-minute observation, timestamps as UTC epoch seconds),
   `fetched_chunks` (which months of which station are cached, and when they were fetched) and `cache_info` (the
   data source the file belongs to).
+- **Whole months**: data is stored by calendar month in UTC, the longest range AEMET accepts per request. Storing
+  a month again replaces it entirely in one transaction, so the cache never keeps records the source no longer
+  publishes, and readers see either the old month or the new one, never a mix. A month without data is recorded
+  as such (`row_count` 0).
 - **No migrations**: everything in the cache can be fetched again. The schema version is stored in the file
   (`PRAGMA user_version`); a file written by another version of the code, or for the other data source, is
   rebuilt at startup and a warning is logged.

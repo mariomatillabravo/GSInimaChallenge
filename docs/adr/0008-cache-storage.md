@@ -39,6 +39,21 @@ refreshed) is a separate decision.
 3. **Migrations** (Alembic or hand-written steps): keep the data, at the cost of maintaining a migration history
    for data that can be fetched again.
 
+**Storing a month that is fetched again**
+
+1. **Replace the whole month**: delete the month's rows, insert the new ones and upsert its `fetched_chunks` row,
+   in one transaction. The month is always an exact copy of the latest fetch.
+2. **Upsert row by row** (`INSERT ... ON CONFLICT DO UPDATE`): fewer writes, but a record the source stops
+   publishing (for example one later flagged as bad quality, which the parser discards) would stay in the cache
+   forever, and `row_count` would no longer match the rows stored.
+
+**What reads return**
+
+1. **`Observation` objects**: the type every `WeatherSource` already returns, so aggregation and the service do
+   not change, and the cache is invisible to the rest of the code.
+2. **A pandas DataFrame** (`pd.read_sql`): faster for very long ranges (ten years are about 525,000 rows) because
+   no object is built per row, but it breaks the type boundary and changes the aggregation input.
+
 **Keeping demo and real data apart**
 
 1. **One default file per mode plus a guard**: `data/cache.sqlite3` for real data and `data/cache-demo.sqlite3`
@@ -88,6 +103,9 @@ The options:
   `DateTime` type would store naive text in SQLite, which the project never uses. `station_id` is the station's
   identifier in the registry (`juan-carlos-i`). Both data tables are `WITHOUT ROWID` tables: rows are stored in
   primary key order, which is the range scan the cache performs, with no separate index.
+- **Repository** (`CacheRepository`): it reports which months are cached, stores a whole month and reads a time
+  range back. A re-fetched month is **replaced** (option 1), and reads return **`Observation` objects**
+  (option 1). It holds no freshness rules: deciding when to fetch belongs to the service.
 - **Schema changes**: option 1, `PRAGMA user_version` and a rebuild on any mismatch, logged as a warning.
 - **Demo and real data**: option 1, one default file per mode plus the `cache_info` guard.
 - **Per-connection settings**: `busy_timeout = 5000` (wait up to 5 s for another connection's write lock instead
@@ -113,7 +131,10 @@ The options:
   each thread its own `:memory:` database). They were checked against the rejected designs: removing
   `BEGIN IMMEDIATE`, the transaction control event or the WAL retry makes them fail.
 - Writes are serialized by SQLite itself, across threads and processes, so several workers can share the file
-  safely.
+  safely. Readers see a month either before or after a replacement, never halfway, which a test checks while
+  writers keep replacing the same month.
+- Reading a very long range builds one object per row. If that ever shows up in profiles, a DataFrame read path
+  for aggregation is the contained optimisation.
 - The pool keeps up to 5 connections plus 10 temporary ones, fewer than the ~40 request threads. Requests hold a
   connection only for short queries, so contention stays low; a thread that finds no free connection waits up to
   30 s.
