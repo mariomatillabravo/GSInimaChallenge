@@ -19,7 +19,8 @@ from app.api.routes import health, measurements, stations
 from app.clients.aemet import AemetAntarcticaClient
 from app.clients.recorded import RecordedWeatherSource
 from app.core.config import Settings
-from app.services.measurements import MeasurementService
+from app.db.database import open_database
+from app.services.measurements import MeasurementService, SourceLabel
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -52,10 +53,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Create long-lived resources at startup and release them at shutdown."""
+    """Create long-lived resources at startup and release them at shutdown.
+
+    Startup runs before the server accepts requests, so its short blocking steps (opening the
+    SQLite file) hold up no request.
+    """
+    settings: Settings = app.state.settings
     with ExitStack() as resources:
-        app.state.measurement_service = _build_measurement_service(app.state.settings, resources)
+        engine = open_database(settings.cache_db_file, data_source=_source_label(settings))
+        resources.callback(engine.dispose)
+        app.state.db_engine = engine
+        app.state.measurement_service = _build_measurement_service(settings, resources)
         yield
+
+
+def _source_label(settings: Settings) -> SourceLabel:
+    return "demo" if settings.demo_mode else "aemet"
 
 
 def _build_measurement_service(settings: Settings, resources: ExitStack) -> MeasurementService:

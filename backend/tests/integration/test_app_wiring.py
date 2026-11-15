@@ -89,6 +89,15 @@ def test_real_mode_calls_aemet_through_the_real_client(router: respx.MockRouter)
     assert [row["samples"] for row in body["data"]] == EXPECTED_SAMPLES
 
 
+def test_startup_prepares_the_cache_database(tmp_path: Path) -> None:
+    path = tmp_path / "data" / "cache.sqlite3"
+    settings = Settings(_env_file=None, demo_mode=True, cache_db_path=path)
+
+    with TestClient(create_app(settings)) as client:
+        assert client.get("/health").status_code == 200
+        assert path.exists()
+
+
 def test_real_mode_cannot_tell_the_available_range() -> None:
     settings = Settings(_env_file=None, aemet_api_key="test-key")
 

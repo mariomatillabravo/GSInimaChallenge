@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     demo_data_dir: Path = Path("sample_data/demo")
     """Folder with the recorded responses used in demo mode (relative to the backend folder)."""
 
+    cache_db_path: Path | None = None
+    """SQLite file of the cache (relative to the backend folder). See ``cache_db_file``."""
+
     aemet_api_key: SecretStr | None = None
     """Personal AEMET OpenData API key. Never logged: ``SecretStr`` hides it in reprs."""
 
@@ -42,6 +45,16 @@ class Settings(BaseSettings):
     """About 3,700 daily rows (ten years)."""
     max_range_days_monthly: PositiveInt | None = None
     """No practical limit: a monthly series stays small."""
+
+    @property
+    def cache_db_file(self) -> Path:
+        """The cache file in use: ``CACHE_DB_PATH`` if set, otherwise one default file per mode.
+
+        Demo and real data never share a default file, so switching modes keeps both caches.
+        """
+        if self.cache_db_path is not None:
+            return self.cache_db_path
+        return Path("data/cache-demo.sqlite3" if self.demo_mode else "data/cache.sqlite3")
 
     def max_range_days(self, aggregation: Aggregation) -> int | None:
         """Maximum range, in days, allowed for an aggregation level (``None`` = unlimited)."""

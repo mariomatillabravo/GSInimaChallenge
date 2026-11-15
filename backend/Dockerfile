@@ -23,7 +23,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH"
 
 WORKDIR /app
-RUN useradd --create-home --uid 10001 app
+# /app belongs to root, so the cache folder is created here and handed to the app user. A named
+# volume mounted on it starts with this ownership, which lets the app create the SQLite files.
+RUN useradd --create-home --uid 10001 app \
+    && mkdir /app/data \
+    && chown app:app /app/data
 
 COPY --from=builder /app/.venv /app/.venv
 COPY app ./app

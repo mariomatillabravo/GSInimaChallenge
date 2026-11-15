@@ -73,6 +73,11 @@ pnpm-debug.log*
 *.sqlite-journal
 *.sqlite-wal
 *.sqlite-shm
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
+# Default folder of the cache files (see CACHE_DB_PATH)
+backend/data/
 
 # =========================================================
 # Logs

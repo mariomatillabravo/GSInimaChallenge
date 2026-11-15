@@ -12,4 +12,11 @@ services:
       # Demo mode by default, so `docker compose up` works without an API key.
       # Use real data with: DEMO_MODE=false docker compose up
       DEMO_MODE: ${DEMO_MODE:-true}
+    # The SQLite cache lives in a named volume, so it survives container restarts and rebuilds.
+    # `docker compose down -v` deletes it.
+    volumes:
+      - cache-data:/app/data
     restart: unless-stopped
+
+volumes:
+  cache-data:

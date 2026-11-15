@@ -32,8 +32,9 @@ most requests short reads. CPU-bound work scales with processes, not threads or 
 
 ## Consequences
 
-- Endpoints are `def`. The few `async` functions (the application lifespan and the exception handlers) do no
-  blocking work.
+- Endpoints are `def`. The few `async` functions (the application lifespan and the exception handlers) never
+  block while requests are being served: the lifespan only opens resources (the HTTP client, the SQLite cache)
+  before the server accepts requests and closes them after it stops.
 - Concurrency per process is bounded by the thread pool (about 40 threads by default); scaling out means more
   worker processes or replicas.
 - If streaming or many slow upstream calls ever became the norm, moving to async would be contained in the client

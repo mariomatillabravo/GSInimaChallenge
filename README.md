@@ -314,6 +314,31 @@ are always 24 hours long, so Madrid's DST never makes a bucket look incomplete.
 The reasoning, including the rejected Madrid-day and UTC-day alternatives, is in
 [ADR-0005](docs/adr/0005-aggregation.md).
 
+## Cache
+
+The service keeps the data it fetches in a local SQLite database, so repeated queries do not call AEMET again.
+The database is created and checked at startup. Requests do not read from it yet: serving data from the cache is
+the next step of Part 2 (see [Project status](#project-status)).
+
+### Storage
+
+- **One file per mode** by default: `backend/data/cache.sqlite3` for real data and
+  `backend/data/cache-demo.sqlite3` for the demo, so switching modes never mixes recorded and real data. In
+  Docker the files live in the `cache-data` named volume. The path can be changed with `CACHE_DB_PATH`.
+- **Tables**: `measurements` (one row per station and ten-minute observation, timestamps as UTC epoch seconds),
+  `fetched_chunks` (which months of which station are cached, and when they were fetched) and `cache_info` (the
+  data source the file belongs to).
+- **No migrations**: everything in the cache can be fetched again. The schema version is stored in the file
+  (`PRAGMA user_version`); a file written by another version of the code, or for the other data source, is
+  rebuilt at startup and a warning is logged.
+- **Safe under concurrency**: write-ahead logging (WAL) lets reads and a write happen at the same time, and every
+  write transaction takes SQLite's write lock before it reads anything (`BEGIN IMMEDIATE`), so concurrent writers,
+  in threads or in several worker processes, wait for their turn instead of failing. Tests run these races on
+  real files.
+
+Library choice, schema, transaction handling and SQLite's limits are discussed in
+[ADR-0008](docs/adr/0008-cache-storage.md).
+
 ## Design decisions
 
 Each significant decision is recorded as an Architecture Decision Record (ADR) in [`docs/adr/`](docs/adr/), with
@@ -328,6 +353,7 @@ its context, the options considered and its consequences.
 | [0005](docs/adr/0005-aggregation.md) | Buckets in station local time labelled in Madrid time, means of non-missing values, and `samples`, `expected_samples` and `coverage` on every aggregated row, empty buckets included |
 | [0006](docs/adr/0006-output-field-names.md) | snake_case JSON keys with a `fields` block holding the official labels, corrected unit symbols, readable station names |
 | [0007](docs/adr/0007-concurrency-model.md) | Synchronous request handling: SQLite and pandas block, so `def` endpoints in the thread pool are correct by construction |
+| [0008](docs/adr/0008-cache-storage.md) | SQLite through SQLAlchemy Core for the cache: one file per mode, rebuilt instead of migrated, WAL and `BEGIN IMMEDIATE` writes for safe concurrency |
 
 ## Development
 
@@ -347,6 +373,7 @@ git-ignored. To start, copy [`backend/.env.example`](backend/.env.example) to `b
 |---|---|---|
 | `DEMO_MODE` | `false` | Serve recorded AEMET responses instead of calling the real API. No API key is needed. |
 | `DEMO_DATA_DIR` | `sample_data/demo` | Folder with the recorded responses used in demo mode, relative to `backend/` |
+| `CACHE_DB_PATH` | `data/cache.sqlite3`, or `data/cache-demo.sqlite3` in demo mode | SQLite file of the cache, relative to `backend/` |
 | `AEMET_API_KEY` | none | Personal AEMET OpenData API key. Required when `DEMO_MODE` is `false`. |
 | `AEMET_BASE_URL` | `https://opendata.aemet.es/opendata` | AEMET OpenData base URL |
 | `AEMET_TIMEOUT_SECONDS` | `30` | Timeout of each HTTP request to AEMET |
@@ -378,13 +405,13 @@ Run them from the repository root.
 | `make typecheck` | `uv run --directory backend mypy` | Static type checking in strict mode |
 | `make check` | The `lint`, `typecheck` and `test` commands above | Everything CI runs |
 | `make up` | `docker compose up --build` | Build and start the Docker stack (demo mode by default) |
-| `make down` | `docker compose down` | Stop the Docker stack |
+| `make down` | `docker compose down` | Stop the Docker stack. The cache volume is kept; `docker compose down -v` deletes it |
 
 ## Project status
 
 | Part | Scope | Status |
 |---|---|---|
 | Part 1 | API with time zone and DST handling, aggregation, data quality fields, CSV export, demo mode, Docker | Done |
-| Part 2 | SQLite cache of AEMET data, resilience when AEMET fails, structured logging | To do |
+| Part 2 | SQLite cache of AEMET data, resilience when AEMET fails, structured logging | In progress: cache storage done |
 | Part 3 | TypeScript front-end with table and charts | To do |
 | Extras | Wind-energy metrics (cubic mean speed, maximum speed, air density, wind power density), CI polish | To do |

@@ -61,6 +61,24 @@ def test_range_limits_per_aggregation_level() -> None:
     assert settings.max_range_days(Aggregation.MONTHLY) is None
 
 
+def test_demo_and_real_data_use_different_cache_files_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("CACHE_DB_PATH")
+
+    demo = Settings(_env_file=None, demo_mode=True)
+    real = Settings(_env_file=None, aemet_api_key="test-key")
+
+    assert demo.cache_db_file == Path("data/cache-demo.sqlite3")
+    assert real.cache_db_file == Path("data/cache.sqlite3")
+
+
+def test_cache_file_can_be_configured(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("CACHE_DB_PATH", str(tmp_path / "custom.sqlite3"))
+
+    assert Settings(_env_file=None, demo_mode=True).cache_db_file == tmp_path / "custom.sqlite3"
+
+
 def test_app_refuses_to_start_without_valid_configuration(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
