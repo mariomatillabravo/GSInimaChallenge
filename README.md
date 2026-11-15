@@ -6,6 +6,24 @@ Web API that retrieves, caches and aggregates weather data from the Spanish Anta
 (Juan Carlos I and Gabriel de Castilla) published by
 [AEMET OpenData](https://opendata.aemet.es/centrodedescargas/inicio).
 
+## Data source
+
+All weather data comes from the AEMET OpenData API (Spanish State Meteorological Agency), Antarctica endpoint, for
+two automatic weather stations:
+
+| Station | Location | AEMET identifier |
+|---|---|---|
+| Juan Carlos I | Livingston Island, South Shetland Islands | `89064` |
+| Gabriel de Castilla | Deception Island, South Shetland Islands | `89070` |
+
+> © AEMET. Autorizado el uso de la información y su reproducción citando a AEMET como autora de la misma.
+>
+> *(© AEMET. Use and reproduction of the information is authorised provided AEMET is cited as its author.)*
+> See AEMET's [legal notice](https://www.aemet.es/es/nota_legal).
+
+The repository includes a few real AEMET responses as test fixtures; their origin is documented in
+[`backend/tests/fixtures/aemet/`](backend/tests/fixtures/aemet/README.md).
+
 ## Development
 
 ### Prerequisites

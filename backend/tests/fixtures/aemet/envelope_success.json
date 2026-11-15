@@ -1,0 +1,6 @@
+{
+  "descripcion" : "exito",
+  "estado" : 200,
+  "datos" : "https://opendata.aemet.es/opendata/sh/9905a00d_202611151227_json",
+  "metadatos" : "https://opendata.aemet.es/opendata/sh/2cc612ba"
+}

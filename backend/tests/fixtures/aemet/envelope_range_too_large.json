@@ -1,0 +1,4 @@
+{
+  "descripcion" : "El rango de fechas no puede ser superior a 1 mes",
+  "estado" : 400
+}

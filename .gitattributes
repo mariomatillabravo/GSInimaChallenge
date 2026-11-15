@@ -2,6 +2,9 @@
 # so scripts, Dockerfiles and the Makefile behave the same on Windows and inside Linux containers.
 * text=auto eol=lf
 
+# Recorded upstream responses must stay byte-exact: never normalize their line endings
+backend/tests/fixtures/aemet/*.json -text
+
 # Windows-only scripts need CRLF to run reliably in cmd.exe
 *.bat text eol=crlf
 *.cmd text eol=crlf
