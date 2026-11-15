@@ -81,6 +81,11 @@ pnpm-debug.log*
 logs/
 
 # =========================================================
+# Raw output of the AEMET exploration script (large, regenerable)
+# =========================================================
+backend/sample_data/raw/
+
+# =========================================================
 # Docker (personal overrides)
 # =========================================================
 docker-compose.override.yml
