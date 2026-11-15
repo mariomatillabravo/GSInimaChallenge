@@ -1,24 +1,32 @@
 """Integration tests for the measurements endpoint, through the whole HTTP stack.
 
-The weather source is replaced by an in-memory fake through ``dependency_overrides``.
+The weather source is replaced by an in-memory fake through ``dependency_overrides``; the cache
+is a real SQLite file and the clock is fixed.
 """
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import Engine
 
 from app.api.dependencies import get_measurement_service
 from app.core.config import Settings
 from app.core.exceptions import UpstreamError, UpstreamTimeoutError, UpstreamUnavailableError
+from app.db.database import open_database
+from app.db.repository import CacheRepository
+from app.domain.freshness import FreshnessPolicy
 from app.domain.measurements import Observation
 from app.domain.stations import Station
 from app.main import create_app
-from app.services.measurements import MeasurementService
+from app.services.measurements import MeasurementService, SourceLabel
 
 URL = "/api/v1/stations/juan-carlos-i/measurements"
+NOW = datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
+POLICY = FreshnessPolicy(ttl=timedelta(hours=1), grace=timedelta(hours=48))
 
 
 class FakeWeatherSource:
@@ -48,15 +56,36 @@ def grid(start: str, count: int, temperature: float | None = 1.0) -> list[Observ
     ]
 
 
+ServiceFactory = Callable[[FakeWeatherSource, SourceLabel], MeasurementService]
+
+
 @pytest.fixture
 def source() -> FakeWeatherSource:
     return FakeWeatherSource()
 
 
 @pytest.fixture
-def api(settings: Settings, source: FakeWeatherSource) -> Iterator[TestClient]:
+def make_service(tmp_path: Path) -> Iterator[ServiceFactory]:
+    """Build a service over a source, with its own cache file and the clock fixed at ``NOW``."""
+    engines: list[Engine] = []
+
+    def make(source: FakeWeatherSource, label: SourceLabel) -> MeasurementService:
+        engine = open_database(tmp_path / f"service-{label}.sqlite3", data_source=label)
+        engines.append(engine)
+        return MeasurementService(source, label, CacheRepository(engine), POLICY, clock=lambda: NOW)
+
+    yield make
+    for engine in engines:
+        engine.dispose()
+
+
+@pytest.fixture
+def api(
+    settings: Settings, source: FakeWeatherSource, make_service: ServiceFactory
+) -> Iterator[TestClient]:
     app = create_app(settings)
-    app.dependency_overrides[get_measurement_service] = lambda: MeasurementService(source, "demo")
+    service = make_service(source, "demo")
+    app.dependency_overrides[get_measurement_service] = lambda: service
     with TestClient(app) as client:
         yield client
 
@@ -90,6 +119,7 @@ class TestRawSeries:
             "output_timezone": "Europe/Madrid",
             "station_timezone": "UTC-03:00",
             "source": "demo",
+            "cache": {"status": "miss", "last_updated": None},
             "count": 3,
         }
         assert body["data"][0] == {
@@ -104,12 +134,16 @@ class TestRawSeries:
         ]  # fmt: skip
         assert body["fields"]["temperature_c"] == {"label": "Temperature (°C)", "unit": "°C"}
 
-    def test_the_source_receives_the_range_in_utc(
+    def test_the_source_is_asked_for_whole_months_in_utc(
         self, api: TestClient, source: FakeWeatherSource
     ) -> None:
-        get_ok(api, start="2026-07-15T00:00:00", end="2026-07-16T00:00:00")
+        # 00:30 on 1 August in Madrid is still 31 July in UTC, so July is needed too.
+        get_ok(api, start="2026-08-01T00:30:00", end="2026-08-01T06:00:00")
 
-        assert source.calls == [("89064", utc("2026-07-14T22:00:00"), utc("2026-07-15T22:00:00"))]
+        assert source.calls == [
+            ("89064", utc("2026-07-01T00:00:00"), utc("2026-07-31T23:59:59")),
+            ("89064", utc("2026-08-01T00:00:00"), utc("2026-08-31T23:59:59")),
+        ]
 
     def test_only_requested_types_are_returned(
         self, api: TestClient, source: FakeWeatherSource
@@ -166,12 +200,11 @@ class TestRawSeries:
 
 class TestEmptyResults:
     def test_empty_aemet_result_explains_the_seasonal_campaigns(
-        self, settings: Settings, source: FakeWeatherSource
+        self, settings: Settings, source: FakeWeatherSource, make_service: ServiceFactory
     ) -> None:
         app = create_app(settings)
-        app.dependency_overrides[get_measurement_service] = lambda: MeasurementService(
-            source, "aemet"
-        )
+        service = make_service(source, "aemet")
+        app.dependency_overrides[get_measurement_service] = lambda: service
 
         with TestClient(app) as client:
             response = client.get(
@@ -329,13 +362,12 @@ class TestErrors:
         }
 
     def test_unexpected_errors_do_not_leak_details(
-        self, settings: Settings, source: FakeWeatherSource
+        self, settings: Settings, source: FakeWeatherSource, make_service: ServiceFactory
     ) -> None:
         source.error = RuntimeError("database password is hunter2")
         app = create_app(settings)
-        app.dependency_overrides[get_measurement_service] = lambda: MeasurementService(
-            source, "demo"
-        )
+        service = make_service(source, "demo")
+        app.dependency_overrides[get_measurement_service] = lambda: service
 
         with TestClient(app, raise_server_exceptions=False) as client:
             response = client.get(
@@ -404,3 +436,34 @@ class TestCsvExport:
 
         assert response.status_code == 422
         assert response.json()["error"]["parameter"] == "format"
+
+
+class TestCacheMetadata:
+    def test_a_repeated_request_is_served_from_the_cache_and_says_so(
+        self, api: TestClient, source: FakeWeatherSource
+    ) -> None:
+        source.observations = grid("2026-01-15T00:00:00", 3)
+        params = {"start": "2026-01-15T00:00:00Z", "end": "2026-01-15T00:20:00Z"}
+
+        first = api.get(URL, params=params)
+        second = api.get(URL, params=params)
+
+        assert first.headers["X-Cache-Status"] == "miss"
+        assert second.headers["X-Cache-Status"] == "hit"
+        assert second.json()["metadata"]["cache"] == {"status": "hit", "last_updated": None}
+        assert second.json()["data"] == first.json()["data"]
+        assert len(source.calls) == 1
+
+    def test_last_updated_is_given_for_a_month_that_can_still_change(self, api: TestClient) -> None:
+        body = get_ok(api, start="2026-11-10T00:00:00Z", end="2026-11-11T00:00:00Z")
+
+        assert body["metadata"]["cache"] == {
+            "status": "miss",
+            "last_updated": "2026-11-15T13:00:00+01:00",  # NOW in Madrid time
+        }
+
+    def test_csv_downloads_carry_the_cache_status_header(self, api: TestClient) -> None:
+        params = {"start": "2026-01-15T00:00:00Z", "end": "2026-01-15T00:20:00Z", "format": "csv"}
+
+        assert api.get(URL, params=params).headers["X-Cache-Status"] == "miss"
+        assert api.get(URL, params=params).headers["X-Cache-Status"] == "hit"

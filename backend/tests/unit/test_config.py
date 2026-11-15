@@ -1,11 +1,13 @@
 """Unit tests for the application settings."""
 
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
 from app.core.config import Settings
+from app.domain.freshness import FreshnessPolicy
 from app.domain.measurements import Aggregation
 from app.main import create_app
 
@@ -77,6 +79,16 @@ def test_cache_file_can_be_configured(monkeypatch: pytest.MonkeyPatch, tmp_path:
     monkeypatch.setenv("CACHE_DB_PATH", str(tmp_path / "custom.sqlite3"))
 
     assert Settings(_env_file=None, demo_mode=True).cache_db_file == tmp_path / "custom.sqlite3"
+
+
+def test_cache_freshness_defaults_and_overrides() -> None:
+    defaults = Settings(_env_file=None, demo_mode=True)
+    custom = Settings(_env_file=None, demo_mode=True, cache_ttl_minutes=15, cache_grace_hours=0)
+
+    assert defaults.freshness_policy == FreshnessPolicy(
+        ttl=timedelta(hours=1), grace=timedelta(hours=48)
+    )
+    assert custom.freshness_policy == FreshnessPolicy(ttl=timedelta(minutes=15), grace=timedelta(0))
 
 
 def test_app_refuses_to_start_without_valid_configuration(

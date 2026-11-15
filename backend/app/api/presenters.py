@@ -6,6 +6,7 @@ from datetime import tzinfo
 from typing import Any, Final
 
 from app.api.schemas import (
+    CacheInfo,
     FieldInfo,
     MeasurementRow,
     MeasurementsResponse,
@@ -75,6 +76,14 @@ def present_measurements(result: MeasurementResult) -> MeasurementsResponse:
             output_timezone=OUTPUT_TIMEZONE.key,
             station_timezone=timezone_name(station.local_timezone),
             source=result.source,
+            cache=CacheInfo(
+                status=result.cache.status,
+                last_updated=(
+                    format_output_datetime(result.cache.last_updated)
+                    if result.cache.last_updated is not None
+                    else None
+                ),
+            ),
             count=len(result.rows),
         ),
         fields=_fields(query.types, aggregated=aggregated, with_period=with_period),

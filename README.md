@@ -97,6 +97,7 @@ curl "http://localhost:8000/api/v1/stations/juan-carlos-i/measurements?start=202
     "output_timezone": "Europe/Madrid",
     "station_timezone": "UTC-03:00",
     "source": "aemet",
+    "cache": {"status": "miss", "last_updated": null},
     "count": 2
   },
   "fields": {
@@ -119,6 +120,10 @@ curl "http://localhost:8000/api/v1/stations/juan-carlos-i/measurements?start=202
 The example shows station-local days at work. Midnight in Madrid is 20:00 of the previous day at the station, so
 the requested range touches two station days. The first one only contributes its last three hours, which its
 `coverage` makes obvious.
+
+`metadata.cache` tells whether the data came from the [cache](#cache): this was the first request for January
+2026, so it was fetched (`miss`); repeating it gives `hit`. `last_updated` is `null` because January can no
+longer change. The same status is sent in the `X-Cache-Status` header, also on CSV downloads.
 
 ### Empty results
 
@@ -317,8 +322,35 @@ The reasoning, including the rejected Madrid-day and UTC-day alternatives, is in
 ## Cache
 
 The service keeps the data it fetches in a local SQLite database, so repeated queries do not call AEMET again.
-The database is created and checked at startup. Requests do not read from it yet: serving data from the cache is
-the next step of Part 2 (see [Project status](#project-status)).
+Every response is served from the cache: the months of the range that are missing or expired are fetched and
+stored first, then the whole range is read from the cache and aggregated.
+
+### Freshness
+
+Data is fetched and cached by **calendar month in UTC**. A month can still change while it is in progress and
+for a while after it ends, as late observations are published:
+
+| Situation of the cached month | What a request does |
+|---|---|
+| Not cached | Fetches it |
+| Fetched at least `CACHE_GRACE_HOURS` (48 h) after the month ended | Uses the cache, forever: the month is **final** |
+| Otherwise (month in progress, or ended recently) | Uses the cache for `CACHE_TTL_MINUTES` (60 min) after the fetch, then fetches it again |
+
+For example, January fetched on 1 February at 10:00 UTC is not final yet. A request on 5 February finds it
+expired and fetches it again; that copy is final, so on 6 February nothing is fetched.
+
+- **Empty months are cached too**, so a month without data is not requested again once it is final.
+- The **month in progress** is fetched up to the current time, and months that start in the future are not
+  fetched at all: they cannot have data yet.
+- The **fetch time** recorded is the moment the request started, not when the fetch finished: the data is at
+  least that recent, never less.
+- The 48-hour grace is an assumption: how long AEMET takes to publish late Antarctic observations is still to be
+  verified, so it is configurable.
+
+The response says how it was served: `metadata.cache.status` is `hit` (nothing had to be fetched), `miss` (every
+month was fetched) or `partial`, also sent as the `X-Cache-Status` header. `metadata.cache.last_updated` is the
+oldest fetch time among the months that can still change, in Madrid time, or `null` when all the requested data
+is final. The full reasoning is in [ADR-0009](docs/adr/0009-caching-strategy.md).
 
 ### Storage
 
@@ -358,6 +390,7 @@ its context, the options considered and its consequences.
 | [0006](docs/adr/0006-output-field-names.md) | snake_case JSON keys with a `fields` block holding the official labels, corrected unit symbols, readable station names |
 | [0007](docs/adr/0007-concurrency-model.md) | Synchronous request handling: SQLite and pandas block, so `def` endpoints in the thread pool are correct by construction |
 | [0008](docs/adr/0008-cache-storage.md) | SQLite through SQLAlchemy Core for the cache: one file per mode, rebuilt instead of migrated, WAL and `BEGIN IMMEDIATE` writes for safe concurrency |
+| [0009](docs/adr/0009-caching-strategy.md) | Cache-first by UTC month: final months are kept forever, months that can still change expire after a TTL, empty months are cached, and every response reports how it was served |
 
 ## Development
 
@@ -378,6 +411,8 @@ git-ignored. To start, copy [`backend/.env.example`](backend/.env.example) to `b
 | `DEMO_MODE` | `false` | Serve recorded AEMET responses instead of calling the real API. No API key is needed. |
 | `DEMO_DATA_DIR` | `sample_data/demo` | Folder with the recorded responses used in demo mode, relative to `backend/` |
 | `CACHE_DB_PATH` | `data/cache.sqlite3`, or `data/cache-demo.sqlite3` in demo mode | SQLite file of the cache, relative to `backend/` |
+| `CACHE_TTL_MINUTES` | `60` | How long a month that can still change is served from the cache before it is fetched again |
+| `CACHE_GRACE_HOURS` | `48` | Hours after a month ends during which AEMET may still add data; a month fetched later is final |
 | `AEMET_API_KEY` | none | Personal AEMET OpenData API key. Required when `DEMO_MODE` is `false`. |
 | `AEMET_BASE_URL` | `https://opendata.aemet.es/opendata` | AEMET OpenData base URL |
 | `AEMET_TIMEOUT_SECONDS` | `30` | Timeout of each HTTP request to AEMET |
@@ -416,6 +451,6 @@ Run them from the repository root.
 | Part | Scope | Status |
 |---|---|---|
 | Part 1 | API with time zone and DST handling, aggregation, data quality fields, CSV export, demo mode, Docker | Done |
-| Part 2 | SQLite cache of AEMET data, resilience when AEMET fails, structured logging | In progress: cache storage done |
+| Part 2 | SQLite cache of AEMET data, resilience when AEMET fails, structured logging | In progress: the cache serves every request |
 | Part 3 | TypeScript front-end with table and charts | To do |
 | Extras | Wind-energy metrics (cubic mean speed, maximum speed, air density, wind power density), CI polish | To do |

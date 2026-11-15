@@ -1,15 +1,30 @@
 """Use case: obtain the measurements of a station for a time range, aggregated as requested."""
 
+import logging
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Literal
 
+from app.db.repository import CacheRepository
 from app.domain.aggregation import SeriesRow, build_series
+from app.domain.chunks import CachedChunk, month_chunks
+from app.domain.freshness import CacheReport, FreshnessPolicy, MonthState, needs_fetch, summarize
 from app.domain.measurements import Aggregation, MeasurementType
 from app.domain.sources import AvailableRange, KnowsAvailableRange, WeatherSource
 from app.domain.stations import Station
 from app.domain.time_range import TimeRange
 
+logger = logging.getLogger(__name__)
+
 SourceLabel = Literal["aemet", "demo"]
+
+Clock = Callable[[], datetime]
+"""Returns the current time, aware and in UTC. Injected so tests can control time."""
+
+
+def utc_now() -> datetime:
+    return datetime.now(UTC)
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,31 +43,57 @@ class MeasurementResult:
     rows: list[SeriesRow]
     source: SourceLabel
     """Where the data came from, reported in the response metadata."""
+    cache: CacheReport
+    """Whether the data was served from the cache and how recent it is."""
     observation_count: int
-    """Observations returned by the source, before aggregation."""
+    """Observations in the range, before aggregation."""
     available_range: AvailableRange | None = None
     """Only when the source returned nothing and knows which data it holds (demo mode)."""
 
 
 class MeasurementService:
-    """Fetches observations from a weather source and turns them into output rows."""
+    """Serves observations from the cache, fetching from the weather source only what is missing.
 
-    def __init__(self, source: WeatherSource, source_label: SourceLabel) -> None:
+    Data is fetched and cached by calendar month in UTC. Each request:
+
+    1. splits its range into months and skips those that start in the future;
+    2. fetches the months that are missing or expired (see ``app.domain.freshness``) and stores
+       them, replacing any older copy;
+    3. reads the whole range from the cache and aggregates it.
+    """
+
+    def __init__(
+        self,
+        source: WeatherSource,
+        source_label: SourceLabel,
+        repository: CacheRepository,
+        policy: FreshnessPolicy,
+        clock: Clock = utc_now,
+    ) -> None:
         self._source = source
         self._source_label = source_label
+        self._repository = repository
+        self._policy = policy
+        self._clock = clock
 
     @property
     def source_label(self) -> SourceLabel:
         return self._source_label
 
     def get(self, query: MeasurementQuery) -> MeasurementResult:
-        time_range = query.time_range
-        observations = self._source.fetch(query.station, time_range.start, time_range.end)
+        # One instant per request: every month is judged against it, and it is stored as the
+        # fetch time. It precedes the fetch, so the data is at least as recent as that instant.
+        now = self._clock().replace(microsecond=0)
+        station, time_range = query.station, query.time_range
+        report = self._refresh(station, time_range, now)
+        observations = self._repository.read_observations(
+            station.id, time_range.start, time_range.end
+        )
         rows = build_series(
             observations,
             aggregation=query.aggregation,
             types=query.types,
-            station_timezone=query.station.local_timezone,
+            station_timezone=station.local_timezone,
             start=time_range.start,
             end=time_range.end,
         )
@@ -60,8 +101,9 @@ class MeasurementService:
             query=query,
             rows=rows,
             source=self._source_label,
+            cache=report,
             observation_count=len(observations),
-            available_range=None if observations else self.available_range(query.station),
+            available_range=None if observations else self.available_range(station),
         )
 
     def available_range(self, station: Station) -> AvailableRange | None:
@@ -69,3 +111,27 @@ class MeasurementService:
         if isinstance(self._source, KnowsAvailableRange):
             return self._source.available_range(station)
         return None
+
+    def _refresh(self, station: Station, time_range: TimeRange, now: datetime) -> CacheReport:
+        """Fetch and store the months of the range that are missing or expired."""
+        # A month that starts in the future cannot have data yet: it is neither fetched nor stored.
+        chunks = [c for c in month_chunks(time_range.start, time_range.end) if c.start <= now]
+        cached = self._repository.cached_chunks(station.id, [chunk.key for chunk in chunks])
+        months: list[MonthState] = []
+        for chunk in chunks:
+            current = cached.get(chunk.key)
+            if current is not None and not needs_fetch(chunk, current, now, self._policy):
+                months.append(MonthState(chunk, current, fetched_now=False))
+                continue
+            # The month in progress is fetched up to now; nothing exists after it.
+            observations = self._source.fetch(station, chunk.start, min(chunk.end, now))
+            self._repository.save_chunk(station.id, chunk, observations, fetched_at=now)
+            logger.info(
+                "Fetched %s %s from %s: %d observations.",
+                station.id,
+                chunk.key,
+                self._source_label,
+                len(observations),
+            )
+            months.append(MonthState(chunk, CachedChunk(chunk.key, now, len(observations)), True))
+        return summarize(months, self._policy)

@@ -1,11 +1,20 @@
 """Typed application settings, read from environment variables and an optional ``.env`` file."""
 
+from datetime import timedelta
 from pathlib import Path
 from typing import Self
 
-from pydantic import PositiveFloat, PositiveInt, SecretStr, field_validator, model_validator
+from pydantic import (
+    NonNegativeInt,
+    PositiveFloat,
+    PositiveInt,
+    SecretStr,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.domain.freshness import FreshnessPolicy
 from app.domain.measurements import Aggregation
 
 
@@ -26,6 +35,11 @@ class Settings(BaseSettings):
 
     cache_db_path: Path | None = None
     """SQLite file of the cache (relative to the backend folder). See ``cache_db_file``."""
+
+    cache_ttl_minutes: PositiveInt = 60
+    """How long a month that can still change is served from the cache before fetching it again."""
+    cache_grace_hours: NonNegativeInt = 48
+    """Hours after a month ends during which AEMET may still add data (delay to verify)."""
 
     aemet_api_key: SecretStr | None = None
     """Personal AEMET OpenData API key. Never logged: ``SecretStr`` hides it in reprs."""
@@ -55,6 +69,13 @@ class Settings(BaseSettings):
         if self.cache_db_path is not None:
             return self.cache_db_path
         return Path("data/cache-demo.sqlite3" if self.demo_mode else "data/cache.sqlite3")
+
+    @property
+    def freshness_policy(self) -> FreshnessPolicy:
+        return FreshnessPolicy(
+            ttl=timedelta(minutes=self.cache_ttl_minutes),
+            grace=timedelta(hours=self.cache_grace_hours),
+        )
 
     def max_range_days(self, aggregation: Aggregation) -> int | None:
         """Maximum range, in days, allowed for an aggregation level (``None`` = unlimited)."""

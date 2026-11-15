@@ -20,6 +20,8 @@ from app.clients.aemet import AemetAntarcticaClient
 from app.clients.recorded import RecordedWeatherSource
 from app.core.config import Settings
 from app.db.database import open_database
+from app.db.repository import CacheRepository
+from app.domain.sources import WeatherSource
 from app.services.measurements import MeasurementService, SourceLabel
 
 
@@ -59,11 +61,17 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     SQLite file) hold up no request.
     """
     settings: Settings = app.state.settings
+    label = _source_label(settings)
     with ExitStack() as resources:
-        engine = open_database(settings.cache_db_file, data_source=_source_label(settings))
+        engine = open_database(settings.cache_db_file, data_source=label)
         resources.callback(engine.dispose)
         app.state.db_engine = engine
-        app.state.measurement_service = _build_measurement_service(settings, resources)
+        app.state.measurement_service = MeasurementService(
+            _build_source(settings, resources),
+            source_label=label,
+            repository=CacheRepository(engine),
+            policy=settings.freshness_policy,
+        )
         yield
 
 
@@ -71,19 +79,17 @@ def _source_label(settings: Settings) -> SourceLabel:
     return "demo" if settings.demo_mode else "aemet"
 
 
-def _build_measurement_service(settings: Settings, resources: ExitStack) -> MeasurementService:
+def _build_source(settings: Settings, resources: ExitStack) -> WeatherSource:
+    """Recorded responses in demo mode, the real AEMET client otherwise."""
     if settings.demo_mode:
-        return MeasurementService(
-            RecordedWeatherSource(settings.demo_data_dir), source_label="demo"
-        )
+        return RecordedWeatherSource(settings.demo_data_dir)
     if settings.aemet_api_key is None:  # already rejected by Settings; keeps the types exact
         raise RuntimeError("AEMET_API_KEY is required when DEMO_MODE is false.")
     # One HTTP client (connection pool) shared by every request, closed at shutdown.
     http = resources.enter_context(httpx.Client(timeout=settings.aemet_timeout_seconds))
-    client = AemetAntarcticaClient(
+    return AemetAntarcticaClient(
         http,
         api_key=settings.aemet_api_key,
         base_url=settings.aemet_base_url,
         max_attempts=settings.aemet_max_attempts,
     )
-    return MeasurementService(client, source_label="aemet")

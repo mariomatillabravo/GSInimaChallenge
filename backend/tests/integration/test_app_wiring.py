@@ -89,6 +89,14 @@ def test_real_mode_calls_aemet_through_the_real_client(router: respx.MockRouter)
     assert [row["samples"] for row in body["data"]] == EXPECTED_SAMPLES
 
 
+def test_demo_data_goes_through_the_cache(demo_client: TestClient) -> None:
+    first = demo_client.get(URL, params=PARAMS)
+    second = demo_client.get(URL, params=PARAMS)
+
+    assert (first.headers["X-Cache-Status"], second.headers["X-Cache-Status"]) == ("miss", "hit")
+    assert second.json()["data"] == first.json()["data"]
+
+
 def test_startup_prepares_the_cache_database(tmp_path: Path) -> None:
     path = tmp_path / "data" / "cache.sqlite3"
     settings = Settings(_env_file=None, demo_mode=True, cache_db_path=path)

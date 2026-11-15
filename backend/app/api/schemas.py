@@ -80,6 +80,23 @@ class MeasurementRow(BaseModel):
     )
 
 
+class CacheInfo(BaseModel):
+    status: Literal["hit", "miss", "partial"] = Field(
+        description=(
+            "`hit`: nothing had to be fetched from the data source; `miss`: every month of the "
+            "range was fetched for this request; `partial`: a mix. Also sent as `X-Cache-Status`."
+        )
+    )
+    last_updated: str | None = Field(
+        examples=["2026-11-15T13:00:00+01:00"],
+        description=(
+            "When the months of the range that can still change (the current month, or one "
+            "that ended recently) were fetched, the oldest of them, in Europe/Madrid. Null when "
+            "all the requested data is final."
+        ),
+    )
+
+
 class ResponseMetadata(BaseModel):
     station: StationRef
     aggregation: Aggregation
@@ -91,6 +108,7 @@ class ResponseMetadata(BaseModel):
     output_timezone: str = Field(examples=["Europe/Madrid"])
     station_timezone: str = Field(examples=["UTC-03:00"])
     source: Literal["aemet", "demo"] = Field(description="Where the data came from.")
+    cache: CacheInfo = Field(description="Whether the data was served from the cache.")
     count: int = Field(description="Number of rows in data.")
     notice: str | None = Field(
         default=None,

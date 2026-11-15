@@ -16,7 +16,7 @@ data it has already fetched in a local SQLite cache. Constraints:
   AEMET data: most months are "no data" in the demo.
 
 This ADR covers how the data is stored. The caching strategy (which months are fetched and when they are
-refreshed) is a separate decision.
+refreshed) is recorded in [ADR-0009](0009-caching-strategy.md).
 
 ## Options considered
 

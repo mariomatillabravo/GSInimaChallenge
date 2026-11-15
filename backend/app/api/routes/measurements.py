@@ -14,10 +14,19 @@ from app.services.measurements import MeasurementQuery
 
 router = APIRouter(prefix="/api/v1", tags=["measurements"])
 
+CACHE_STATUS_HEADER = "X-Cache-Status"
+"""Repeats ``metadata.cache.status``, so CSV downloads (which have no metadata) carry it too."""
+
 _RESPONSES: dict[int | str, dict[str, Any]] = {
     200: {
         "description": "JSON by default; CSV with the official column labels when `format=csv`.",
         "content": {"text/csv": {"schema": {"type": "string"}}},
+        "headers": {
+            CACHE_STATUS_HEADER: {
+                "description": "`hit`, `miss` or `partial`, as in `metadata.cache.status`.",
+                "schema": {"type": "string"},
+            }
+        },
     },
     404: {"model": ErrorResponse, "description": "Unknown station."},
     422: {"model": ErrorResponse, "description": "Invalid parameter (format, DST, range)."},
@@ -55,6 +64,7 @@ def get_measurements(
     ],
     service: MeasurementServiceDep,
     settings: SettingsDep,
+    response: Response,
     tz: Annotated[
         str | None,
         Query(
@@ -102,11 +112,16 @@ def get_measurements(
         aggregation=aggregation,
         types=parse_measurement_types(types),
     )
-    response = present_measurements(service.get(query))
+    body = present_measurements(service.get(query))
+    cache_header = {CACHE_STATUS_HEADER: body.metadata.cache.status}
     if output_format is OutputFormat.CSV:
         return Response(
-            content=render_csv(response),
+            content=render_csv(body),
             media_type="text/csv",
-            headers={"Content-Disposition": f'attachment; filename="{csv_filename(response)}"'},
+            headers={
+                "Content-Disposition": f'attachment; filename="{csv_filename(body)}"',
+                **cache_header,
+            },
         )
-    return response
+    response.headers.update(cache_header)
+    return body
