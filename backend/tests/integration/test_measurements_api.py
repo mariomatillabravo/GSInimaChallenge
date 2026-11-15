@@ -321,3 +321,62 @@ class TestErrors:
         assert response.status_code == 500
         assert response.json()["error"]["code"] == "internal_error"
         assert "hunter2" not in response.text
+
+
+class TestCsvExport:
+    def test_daily_csv_uses_the_official_labels(
+        self, api: TestClient, source: FakeWeatherSource
+    ) -> None:
+        source.observations = grid("2026-01-15T03:00:00", 144)
+
+        response = api.get(
+            URL,
+            params={
+                "start": "2026-01-15T03:00:00Z",
+                "end": "2026-01-16T02:50:00Z",
+                "aggregation": "daily",
+                "format": "csv",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "text/csv; charset=utf-8"
+        assert response.headers["content-disposition"] == (
+            'attachment; filename="juan-carlos-i_daily_2026-01-15_2026-01-16.csv"'
+        )
+        assert response.content.startswith(b"\xef\xbb\xbf")  # BOM, for Excel
+        lines = response.content.decode("utf-8-sig").splitlines()
+        assert lines == [
+            "Station,Datetime,Period,Temperature (°C),Pressure (hPa),Speed (m/s),"
+            "Samples,Expected samples,Coverage (%)",
+            "Juan Carlos I,2026-01-15T04:00:00+01:00,2026-01-15,1.0,980.0,5.0,144,144,100.0",
+        ]
+
+    def test_raw_csv_with_selected_types_and_missing_values(
+        self, api: TestClient, source: FakeWeatherSource
+    ) -> None:
+        source.observations = grid("2026-01-15T00:00:00", 1, temperature=None)
+
+        response = api.get(
+            URL,
+            params={
+                "start": "2026-01-15T00:00:00Z",
+                "end": "2026-01-15T00:10:00Z",
+                "types": "temperature,speed",
+                "format": "csv",
+            },
+        )
+
+        assert response.content.decode("utf-8-sig").splitlines() == [
+            "Station,Datetime,Temperature (°C),Speed (m/s)",
+            "Juan Carlos I,2026-01-15T01:00:00+01:00,,5.0",
+        ]
+
+    def test_unknown_format_is_rejected(self, api: TestClient) -> None:
+        response = api.get(
+            URL,
+            params={"start": "2026-01-15T00:00:00", "end": "2026-01-16T00:00:00", "format": "xml"},
+        )
+
+        assert response.status_code == 422
+        assert response.json()["error"]["parameter"] == "format"

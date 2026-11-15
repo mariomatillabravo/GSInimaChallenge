@@ -2,11 +2,11 @@
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Path, Query
+from fastapi import APIRouter, Path, Query, Response
 
 from app.api.dependencies import MeasurementServiceDep, SettingsDep
-from app.api.presenters import present_measurements
-from app.api.schemas import ErrorResponse, MeasurementsResponse
+from app.api.presenters import csv_filename, present_measurements, render_csv
+from app.api.schemas import ErrorResponse, MeasurementsResponse, OutputFormat
 from app.domain.measurements import Aggregation, parse_measurement_types
 from app.domain.stations import get_station
 from app.domain.time_range import resolve_range, validate_range_length
@@ -14,7 +14,11 @@ from app.services.measurements import MeasurementQuery
 
 router = APIRouter(prefix="/api/v1", tags=["measurements"])
 
-_ERRORS: dict[int | str, dict[str, Any]] = {
+_RESPONSES: dict[int | str, dict[str, Any]] = {
+    200: {
+        "description": "JSON by default; CSV with the official column labels when `format=csv`.",
+        "content": {"text/csv": {"schema": {"type": "string"}}},
+    },
     404: {"model": ErrorResponse, "description": "Unknown station."},
     422: {"model": ErrorResponse, "description": "Invalid parameter (format, DST, range)."},
     502: {"model": ErrorResponse, "description": "AEMET failed or answered unexpectedly."},
@@ -28,7 +32,7 @@ _ERRORS: dict[int | str, dict[str, Any]] = {
     summary="Measurements of a station for a time range",
     response_model=MeasurementsResponse,
     response_model_exclude_unset=True,
-    responses=_ERRORS,
+    responses=_RESPONSES,
 )
 def get_measurements(
     station_id: Annotated[str, Path(description="Station identifier.", examples=["juan-carlos-i"])],
@@ -74,7 +78,14 @@ def get_measurements(
             ),
         ),
     ] = None,
-) -> MeasurementsResponse:
+    output_format: Annotated[
+        OutputFormat,
+        Query(
+            alias="format",
+            description="`json` (default) or `csv`, a download with the official column labels.",
+        ),
+    ] = OutputFormat.JSON,
+) -> MeasurementsResponse | Response:
     """Return the time series of a station.
 
     Output datetimes are in Europe/Madrid with their offset. Daily and monthly buckets follow
@@ -91,4 +102,11 @@ def get_measurements(
         aggregation=aggregation,
         types=parse_measurement_types(types),
     )
-    return present_measurements(service.get(query))
+    response = present_measurements(service.get(query))
+    if output_format is OutputFormat.CSV:
+        return Response(
+            content=render_csv(response),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{csv_filename(response)}"'},
+        )
+    return response

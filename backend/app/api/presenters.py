@@ -1,7 +1,9 @@
-"""Conversion of domain results into response schemas (pure functions)."""
+"""Conversion of domain results into response schemas and CSV (pure functions)."""
 
+import csv
+import io
 from datetime import tzinfo
-from typing import Any
+from typing import Any, Final
 
 from app.api.schemas import (
     FieldInfo,
@@ -29,6 +31,9 @@ from app.services.measurements import MeasurementResult
 
 VALUE_DECIMALS = 2
 """Output values are rounded for readability; AEMET itself publishes one decimal."""
+
+CSV_ENCODING: Final = "utf-8-sig"
+"""UTF-8 with a byte order mark, so that Excel on Windows shows the degree sign correctly."""
 
 
 def present_station(station: Station) -> StationOut:
@@ -71,6 +76,31 @@ def present_measurements(result: MeasurementResult) -> MeasurementsResponse:
             _row(row, station, query.types, aggregated=aggregated, with_period=with_period)
             for row in result.rows
         ],
+    )
+
+
+def render_csv(response: MeasurementsResponse) -> bytes:
+    """Write the dataset as CSV, with the official labels as column headers.
+
+    It is built from the JSON response itself, so both formats always contain exactly the same
+    columns and values. Missing values are empty cells.
+    """
+    keys = list(response.fields)
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow([response.fields[key].label for key in keys])
+    for row in response.data:
+        values = row.model_dump()
+        writer.writerow(["" if values[key] is None else values[key] for key in keys])
+    return buffer.getvalue().encode(CSV_ENCODING)
+
+
+def csv_filename(response: MeasurementsResponse) -> str:
+    """E.g. ``juan-carlos-i_daily_2026-01-15_2026-01-16.csv`` (dates in Madrid time)."""
+    metadata = response.metadata
+    return (
+        f"{metadata.station.id}_{metadata.aggregation.value}_"
+        f"{metadata.start[:10]}_{metadata.end[:10]}.csv"
     )
 
 

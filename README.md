@@ -25,6 +25,7 @@ Interactive documentation is served at `/docs` (Swagger UI) and `/redoc` once th
 | `tz` | no | Zone of `start`/`end` without offset: IANA name (`Europe/Berlin`) or offset. Default `Europe/Madrid` |
 | `aggregation` | no | `none` (default), `hourly`, `daily` or `monthly` |
 | `types` | no | `temperature`, `pressure`, `speed`, comma-separated or repeated. Default: all |
+| `format` | no | `json` (default) or `csv` |
 
 ### Example
 
@@ -74,6 +75,21 @@ official dataset names required by the challenge (`Station`, `Datetime`, `Temper
 not the degree sign) and `hpa`, copying AEMET's metadata; the correct symbols are used instead. A requested
 measurement without data is `null`; a measurement that was not requested is absent. See
 [ADR-0006](docs/adr/0006-output-field-names.md).
+
+### CSV export
+
+`format=csv` returns the same dataset as a downloadable CSV file whose column headers are the official labels.
+The example request above with `&format=csv` downloads `juan-carlos-i_daily_2026-01-15_2026-01-16.csv`:
+
+```csv
+Station,Datetime,Period,Temperature (°C),Speed (m/s),Samples,Expected samples,Coverage (%)
+Juan Carlos I,2026-01-14T04:00:00+01:00,2026-01-14,1.91,2.09,18,144,12.5
+Juan Carlos I,2026-01-15T04:00:00+01:00,2026-01-15,2.93,2.09,127,144,88.2
+```
+
+The CSV is built from the JSON response itself, so both formats always contain the same columns and values.
+Missing values are empty cells. The file is UTF-8 with a byte order mark, so that Excel on Windows shows the
+degree sign correctly.
 
 ### Errors
 
