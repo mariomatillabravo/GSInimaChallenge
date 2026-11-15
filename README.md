@@ -346,6 +346,10 @@ expired and fetches it again; that copy is final, so on 6 February nothing is fe
   least that recent, never less.
 - The 48-hour grace is an assumption: how long AEMET takes to publish late Antarctic observations is still to be
   verified, so it is configurable.
+- **Concurrent requests for the same month share one fetch**: the first one fetches it, and the others wait for
+  its outcome (the data, or the same error) instead of calling AEMET again. Requests for different months are
+  fetched in parallel. This coordination lives in each process: with several worker processes, each may fetch
+  the month once, and the stored result stays correct.
 
 The response says how it was served: `metadata.cache.status` is `hit` (nothing had to be fetched), `miss` (every
 month was fetched) or `partial`, also sent as the `X-Cache-Status` header. `metadata.cache.last_updated` is the
@@ -390,7 +394,7 @@ its context, the options considered and its consequences.
 | [0006](docs/adr/0006-output-field-names.md) | snake_case JSON keys with a `fields` block holding the official labels, corrected unit symbols, readable station names |
 | [0007](docs/adr/0007-concurrency-model.md) | Synchronous request handling: SQLite and pandas block, so `def` endpoints in the thread pool are correct by construction |
 | [0008](docs/adr/0008-cache-storage.md) | SQLite through SQLAlchemy Core for the cache: one file per mode, rebuilt instead of migrated, WAL and `BEGIN IMMEDIATE` writes for safe concurrency |
-| [0009](docs/adr/0009-caching-strategy.md) | Cache-first by UTC month: final months are kept forever, months that can still change expire after a TTL, empty months are cached, and every response reports how it was served |
+| [0009](docs/adr/0009-caching-strategy.md) | Cache-first by UTC month: final months are kept forever, months that can still change expire after a TTL, empty months are cached, concurrent fetches of a month are coalesced, and every response reports how it was served |
 
 ## Development
 

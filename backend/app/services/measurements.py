@@ -4,20 +4,25 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import partial
 from typing import Literal
 
 from app.db.repository import CacheRepository
 from app.domain.aggregation import SeriesRow, build_series
-from app.domain.chunks import CachedChunk, month_chunks
+from app.domain.chunks import CachedChunk, MonthChunk, month_chunks
 from app.domain.freshness import CacheReport, FreshnessPolicy, MonthState, needs_fetch, summarize
 from app.domain.measurements import Aggregation, MeasurementType
 from app.domain.sources import AvailableRange, KnowsAvailableRange, WeatherSource
 from app.domain.stations import Station
 from app.domain.time_range import TimeRange
+from app.services.coalescing import SingleFlight
 
 logger = logging.getLogger(__name__)
 
 SourceLabel = Literal["aemet", "demo"]
+
+MonthKey = tuple[str, str]
+"""Station identifier and month (``"YYYY-MM"``): the unit of work that fetches are grouped by."""
 
 Clock = Callable[[], datetime]
 """Returns the current time, aware and in UTC. Injected so tests can control time."""
@@ -58,7 +63,7 @@ class MeasurementService:
 
     1. splits its range into months and skips those that start in the future;
     2. fetches the months that are missing or expired (see ``app.domain.freshness``) and stores
-       them, replacing any older copy;
+       them, replacing any older copy; concurrent requests for the same month share one fetch;
     3. reads the whole range from the cache and aggregates it.
     """
 
@@ -69,12 +74,14 @@ class MeasurementService:
         repository: CacheRepository,
         policy: FreshnessPolicy,
         clock: Clock = utc_now,
+        flights: SingleFlight[MonthKey, tuple[CachedChunk, bool]] | None = None,
     ) -> None:
         self._source = source
         self._source_label = source_label
         self._repository = repository
         self._policy = policy
         self._clock = clock
+        self._flights = flights if flights is not None else SingleFlight()
 
     @property
     def source_label(self) -> SourceLabel:
@@ -123,15 +130,35 @@ class MeasurementService:
             if current is not None and not needs_fetch(chunk, current, now, self._policy):
                 months.append(MonthState(chunk, current, fetched_now=False))
                 continue
-            # The month in progress is fetched up to now; nothing exists after it.
-            observations = self._source.fetch(station, chunk.start, min(chunk.end, now))
-            self._repository.save_chunk(station.id, chunk, observations, fetched_at=now)
-            logger.info(
-                "Fetched %s %s from %s: %d observations.",
-                station.id,
-                chunk.key,
-                self._source_label,
-                len(observations),
+            # Concurrent requests for the same month share one fetch and its outcome. A request
+            # that waited for another one's fetch reports the month as fetched: it waited for it.
+            entry, fetched = self._flights.run(
+                (station.id, chunk.key), partial(self._fetch_month, station, chunk, now)
             )
-            months.append(MonthState(chunk, CachedChunk(chunk.key, now, len(observations)), True))
+            months.append(MonthState(chunk, entry, fetched_now=fetched))
         return summarize(months, self._policy)
+
+    def _fetch_month(
+        self, station: Station, chunk: MonthChunk, now: datetime
+    ) -> tuple[CachedChunk, bool]:
+        """Fetch and store one month, unless another request has just stored a fresh copy.
+
+        Returns:
+            What the cache holds for the month, and whether it was fetched.
+        """
+        # Second check, now that this request is the only one working on the month: a fetch
+        # that ended after the first check (made without coordination) has already stored it.
+        current = self._repository.cached_chunks(station.id, [chunk.key]).get(chunk.key)
+        if current is not None and not needs_fetch(chunk, current, now, self._policy):
+            return current, False
+        # The month in progress is fetched up to now; nothing exists after it.
+        observations = self._source.fetch(station, chunk.start, min(chunk.end, now))
+        self._repository.save_chunk(station.id, chunk, observations, fetched_at=now)
+        logger.info(
+            "Fetched %s %s from %s: %d observations.",
+            station.id,
+            chunk.key,
+            self._source_label,
+            len(observations),
+        )
+        return CachedChunk(chunk.key, now, len(observations)), True

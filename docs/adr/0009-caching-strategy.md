@@ -47,6 +47,17 @@ cached copy may be served, and how a response tells the client where its data ca
 2. **Always fetch whole months**: simpler, but it relies on that unverified behaviour and stores future months as
    empty.
 
+**Concurrent requests for the same missing month**
+
+1. **Single flight with a shared outcome**: the first request (the leader) fetches the month; requests that
+   arrive meanwhile wait for its result, or its exception, instead of fetching again. The leader checks the cache
+   once more before fetching, in case a fetch ended just after its first check.
+2. **A lock per month and a second cache check**: waiters find the month stored once the lock is free. But when
+   the fetch fails nothing is stored, so every waiter takes the lock in turn and runs its own full sequence of
+   retries: with AEMET down, the tenth request waits for about ten of them.
+3. **No coordination**: correct, since months are replaced whole, but N simultaneous requests mean N upstream
+   fetches, which wastes quota and invites rate limiting.
+
 **How a response reports the cache**
 
 1. **Keep `source` (`aemet`/`demo`) and add a `cache` block** with `status` (`hit`, `miss`, `partial`) and
@@ -73,6 +84,11 @@ cached copy may be served, and how a response tells the client where its data ca
 - **Fetch time = start of the request** (option 1), truncated to whole seconds. The clock is injected, so tests
   move time forward.
 - **Month in progress fetched up to now; future months skipped** (option 1).
+- **Single flight per station and month** (option 1), in `app/services/coalescing.py`, built on a
+  `concurrent.futures.Future` per key that is forgotten as soon as the fetch ends. A request that waited for
+  another one's fetch reports the month as fetched (`miss`): its response waited for, and depends on, that fetch.
+  A request is the leader of at most one fetch at a time and leads nothing while it waits, so waits can never
+  form a cycle (no deadlock).
 - **Reporting** (option 1): `metadata.cache.status` is `hit` when nothing had to be fetched (also for a range
   entirely in the future), `miss` when every month was fetched and `partial` otherwise. `last_updated` is the
   oldest fetch time among the months of the range that can still change, written in Europe/Madrid, or `null` when
@@ -84,10 +100,13 @@ cached copy may be served, and how a response tells the client where its data ca
 - The first request for a long range with an empty cache still fetches every month, one after another: a ten-year
   daily series means 120 upstream requests. Later requests for any part of it are local.
 - A failed fetch reaches the client as an error, even if an older copy of the month is cached, and nothing is
-  stored. Concurrent requests for the same missing month may each fetch it; replacing whole months keeps the
-  stored result correct.
+  stored. Every request waiting for that fetch receives the same error after a single sequence of retries.
+- Coalescing works within one process. With N worker processes, the same month can be fetched up to N times at
+  once; replacing whole months keeps the stored result correct.
 - A wrong grace only delays or anticipates when a month becomes final: too short and a late record may be missed
   until the cache is rebuilt; too long and a recent month is fetched a few extra times.
 - Tests cover the rules as pure functions (with exact boundaries) and the service end to end with a counting fake
   source, a controllable clock and the real SQLite repository; deliberately breaking the fetch time, the
-  clamping of the current month, the skipping of future months or the TTL boundary makes them fail.
+  clamping of the current month, the skipping of future months or the TTL boundary makes them fail. Concurrency
+  tests hold the leader's fetch until every other request is waiting for it, so they do not depend on timing;
+  removing the coalescing or the second cache check makes them fail.

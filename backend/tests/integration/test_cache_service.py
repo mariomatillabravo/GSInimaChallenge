@@ -1,6 +1,8 @@
 """Tests of the cache-first measurement service: a counting fake source, a controllable clock and
 the real SQLite repository on a temporary file."""
 
+import threading
+import time
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -11,15 +13,25 @@ from sqlalchemy import Engine
 from app.core.exceptions import UpstreamUnavailableError
 from app.db.database import open_database
 from app.db.repository import CacheRepository
+from app.domain.chunks import CachedChunk
 from app.domain.freshness import CacheReport, FreshnessPolicy
 from app.domain.measurements import Aggregation, MeasurementType, Observation
 from app.domain.stations import Station, get_station
 from app.domain.time_range import TimeRange
-from app.services.measurements import MeasurementQuery, MeasurementResult, MeasurementService
+from app.services.coalescing import SingleFlight
+from app.services.measurements import (
+    MeasurementQuery,
+    MeasurementResult,
+    MeasurementService,
+    MonthKey,
+)
 
 STATION = get_station("juan-carlos-i")
 POLICY = FreshnessPolicy(ttl=timedelta(hours=1), grace=timedelta(hours=48))
 NOW = datetime(2026, 11, 15, 12, 0, tzinfo=UTC)
+TIMEOUT = 5.0
+
+Flights = SingleFlight[MonthKey, tuple[CachedChunk, bool]]
 
 
 def at(text: str) -> datetime:
@@ -83,10 +95,15 @@ def source() -> CountingSource:
 
 
 @pytest.fixture
+def flights() -> Flights:
+    return SingleFlight()
+
+
+@pytest.fixture
 def service(
-    source: CountingSource, repository: CacheRepository, clock: FakeClock
+    source: CountingSource, repository: CacheRepository, clock: FakeClock, flights: Flights
 ) -> MeasurementService:
-    return MeasurementService(source, "aemet", repository, POLICY, clock=clock)
+    return MeasurementService(source, "aemet", repository, POLICY, clock=clock, flights=flights)
 
 
 def get(service: MeasurementService, start: str, end: str) -> MeasurementResult:
@@ -217,3 +234,135 @@ def test_a_failed_fetch_stores_nothing_and_reaches_the_caller(
         get(service, "2026-01-15T00:00:00", "2026-01-16T00:00:00")
 
     assert repository.cached_chunks(STATION.id, ["2026-01"]) == {}
+
+
+# Concurrent requests. The first fetch is held until every other request is waiting for it, so
+# the tests never depend on timing.
+
+
+def wait_until(condition: Callable[[], bool]) -> None:
+    deadline = time.monotonic() + TIMEOUT
+    while not condition():
+        if time.monotonic() > deadline:
+            raise AssertionError("Condition not reached in time.")
+        time.sleep(0.005)
+
+
+def request_january_concurrently(
+    service: MeasurementService, source: CountingSource, flights: Flights, requests: int
+) -> list[MeasurementResult | BaseException]:
+    started, release = threading.Event(), threading.Event()
+
+    def hold_the_fetch() -> None:
+        started.set()
+        if not release.wait(TIMEOUT):
+            raise AssertionError("The fetch was never released.")
+
+    source.during_fetch = hold_the_fetch
+    outcomes: list[MeasurementResult | BaseException] = []
+
+    def request() -> None:
+        try:
+            outcomes.append(get(service, "2026-01-15T00:00:00", "2026-01-15T01:00:00"))
+        except BaseException as error:
+            outcomes.append(error)
+
+    first = threading.Thread(target=request)
+    first.start()
+    assert started.wait(TIMEOUT)
+    others = [threading.Thread(target=request) for _ in range(requests - 1)]
+    for thread in others:
+        thread.start()
+    wait_until(lambda: flights.waiting((STATION.id, "2026-01")) == requests - 1)
+    release.set()
+    for thread in [first, *others]:
+        thread.join(TIMEOUT)
+    return outcomes
+
+
+def test_concurrent_requests_for_the_same_month_share_one_fetch(
+    service: MeasurementService, source: CountingSource, flights: Flights
+) -> None:
+    source.observations = grid("2026-01-15T00:00:00", 144)
+
+    outcomes = request_january_concurrently(service, source, flights, requests=10)
+
+    assert len(source.calls) == 1
+    assert all(isinstance(outcome, MeasurementResult) for outcome in outcomes)
+    results = [outcome for outcome in outcomes if isinstance(outcome, MeasurementResult)]
+    assert [result.observation_count for result in results] == [7] * 10
+    # Every request waited for the fetch, so every one of them reports it.
+    assert [result.cache.status for result in results] == ["miss"] * 10
+
+
+def test_a_failed_fetch_reaches_every_waiting_request_without_being_repeated(
+    service: MeasurementService,
+    source: CountingSource,
+    flights: Flights,
+    repository: CacheRepository,
+) -> None:
+    error = UpstreamUnavailableError("AEMET could not be reached.")
+    source.error = error
+
+    outcomes = request_january_concurrently(service, source, flights, requests=10)
+
+    assert outcomes == [error] * 10
+    assert len(source.calls) == 1
+    assert repository.cached_chunks(STATION.id, ["2026-01"]) == {}
+
+
+def test_different_months_are_fetched_at_the_same_time(
+    service: MeasurementService, source: CountingSource
+) -> None:
+    # Each fetch waits for the other one: if months were fetched one at a time, the barrier
+    # would time out and both requests would fail.
+    both_fetching = threading.Barrier(2, timeout=TIMEOUT)
+
+    def wait_for_the_other_fetch() -> None:
+        both_fetching.wait()
+
+    source.during_fetch = wait_for_the_other_fetch
+    outcomes: list[MeasurementResult | BaseException] = []
+
+    def request(start: str, end: str) -> None:
+        try:
+            outcomes.append(get(service, start, end))
+        except BaseException as error:
+            outcomes.append(error)
+
+    threads = [
+        threading.Thread(target=request, args=("2026-01-15T00:00:00", "2026-01-16T00:00:00")),
+        threading.Thread(target=request, args=("2026-02-15T00:00:00", "2026-02-16T00:00:00")),
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(TIMEOUT)
+
+    assert all(isinstance(outcome, MeasurementResult) for outcome in outcomes), outcomes
+    assert len(source.calls) == 2
+
+
+def test_a_month_stored_after_the_first_check_is_not_fetched_again(
+    service: MeasurementService,
+    source: CountingSource,
+    repository: CacheRepository,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    get(service, "2026-01-15T00:00:00", "2026-01-16T00:00:00")
+    # The next request's first check sees an outdated view (as if another request were storing
+    # January at that very moment); the second check, inside the coordinated fetch, sees it.
+    real_cached_chunks = repository.cached_chunks
+    views: list[str] = []
+
+    def outdated_first_view(station_id: str, keys: list[str]) -> dict[str, CachedChunk]:
+        views.append("first" if not views else "second")
+        return {} if len(views) == 1 else real_cached_chunks(station_id, keys)
+
+    monkeypatch.setattr(repository, "cached_chunks", outdated_first_view)
+
+    result = get(service, "2026-01-15T00:00:00", "2026-01-16T00:00:00")
+
+    assert views == ["first", "second"]
+    assert result.cache.status == "hit"
+    assert len(source.calls) == 1
