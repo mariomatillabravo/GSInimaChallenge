@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.config import Settings
+from app.domain.measurements import Aggregation
 from app.main import create_app
 
 
@@ -49,6 +50,15 @@ def test_settings_are_read_from_an_env_file(tmp_path: Path) -> None:
     assert settings.demo_mode is False
     assert settings.aemet_api_key is not None
     assert settings.aemet_api_key.get_secret_value() == "key-from-file"
+
+
+def test_range_limits_per_aggregation_level() -> None:
+    settings = Settings(_env_file=None, demo_mode=True, max_range_days_none=7)
+
+    assert settings.max_range_days(Aggregation.NONE) == 7
+    assert settings.max_range_days(Aggregation.HOURLY) == 366
+    assert settings.max_range_days(Aggregation.DAILY) == 3660
+    assert settings.max_range_days(Aggregation.MONTHLY) is None
 
 
 def test_app_refuses_to_start_without_valid_configuration(

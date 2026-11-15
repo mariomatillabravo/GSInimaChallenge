@@ -20,3 +20,24 @@ class UnknownStationError(NotFoundError):
         self.station_id = station_id
         self.valid_ids = valid_ids
         super().__init__(f"Unknown station '{station_id}'. Valid stations: {', '.join(valid_ids)}.")
+
+
+class InvalidParameterError(AppError):
+    """A request parameter is malformed or inconsistent with the others."""
+
+    def __init__(self, parameter: str, message: str) -> None:
+        self.parameter = parameter
+        self.message = message
+        super().__init__(f"{parameter}: {message}")
+
+
+class NonExistentLocalTimeError(InvalidParameterError):
+    """A local time that the clocks skip when daylight saving time starts."""
+
+
+class AmbiguousLocalTimeError(InvalidParameterError):
+    """A local time that occurs twice when daylight saving time ends."""
+
+
+class RangeTooLargeError(InvalidParameterError):
+    """The requested range exceeds the maximum allowed for the aggregation level."""

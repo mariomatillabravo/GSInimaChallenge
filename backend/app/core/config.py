@@ -2,8 +2,10 @@
 
 from typing import Self
 
-from pydantic import SecretStr, field_validator, model_validator
+from pydantic import PositiveInt, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.domain.measurements import Aggregation
 
 
 class Settings(BaseSettings):
@@ -20,6 +22,25 @@ class Settings(BaseSettings):
 
     aemet_api_key: SecretStr | None = None
     """Personal AEMET OpenData API key. Never logged: ``SecretStr`` hides it in reprs."""
+
+    # Maximum requested range per aggregation level, which keeps every response bounded in size.
+    max_range_days_none: PositiveInt = 31
+    """About 4,500 ten-minute records."""
+    max_range_days_hourly: PositiveInt = 366
+    """About 8,800 hourly rows."""
+    max_range_days_daily: PositiveInt = 3660
+    """About 3,700 daily rows (ten years)."""
+    max_range_days_monthly: PositiveInt | None = None
+    """No practical limit: a monthly series stays small."""
+
+    def max_range_days(self, aggregation: Aggregation) -> int | None:
+        """Maximum range, in days, allowed for an aggregation level (``None`` = unlimited)."""
+        return {
+            Aggregation.NONE: self.max_range_days_none,
+            Aggregation.HOURLY: self.max_range_days_hourly,
+            Aggregation.DAILY: self.max_range_days_daily,
+            Aggregation.MONTHLY: self.max_range_days_monthly,
+        }[aggregation]
 
     @field_validator("aemet_api_key", mode="before")
     @classmethod
