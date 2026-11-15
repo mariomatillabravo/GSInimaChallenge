@@ -13,6 +13,11 @@ class OutputFormat(StrEnum):
     CSV = "csv"
 
 
+class TimeSpanOut(BaseModel):
+    start: str = Field(examples=["2025-03-01T01:00:00+01:00"])
+    end: str = Field(examples=["2025-04-01T01:50:00+02:00"])
+
+
 class StationOut(BaseModel):
     id: str = Field(examples=["juan-carlos-i"], description="Identifier used in URLs.")
     name: str = Field(examples=["Juan Carlos I"])
@@ -25,6 +30,13 @@ class StationOut(BaseModel):
     altitude_m: float
     timezone: str = Field(
         examples=["UTC-03:00"], description="Local time used for daily and monthly buckets."
+    )
+    available_range: TimeSpanOut | None = Field(
+        default=None,
+        description=(
+            "Demo mode only: first and last recorded observation, in Europe/Madrid. "
+            "Null when the data source cannot tell (real AEMET data)."
+        ),
     )
 
 
@@ -80,6 +92,10 @@ class ResponseMetadata(BaseModel):
     station_timezone: str = Field(examples=["UTC-03:00"])
     source: Literal["aemet", "demo"] = Field(description="Where the data came from.")
     count: int = Field(description="Number of rows in data.")
+    notice: str | None = Field(
+        default=None,
+        description="Explanation when no observation was found for the range (absent otherwise).",
+    )
 
 
 class MeasurementsResponse(BaseModel):

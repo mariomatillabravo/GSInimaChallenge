@@ -70,6 +70,16 @@ The example shows station-local days at work. Midnight in Madrid is 20:00 of the
 the requested range touches two station days. The first one only contributes its last three hours, which its
 `coverage` makes obvious.
 
+### Empty results
+
+A range without observations is a valid empty result (HTTP 200), and `metadata.notice` explains it:
+
+- with real data: AEMET has no data for the range, as the stations mostly report during the austral summer
+  campaigns (roughly November to March);
+- in demo mode: there is no recording for the range, and the notice gives the recorded span. `GET /api/v1/stations`
+  also reports each station's `available_range` in demo mode (it is `null` with real data, which cannot be known
+  without extra calls to AEMET).
+
 ### Field names
 
 JSON keys are snake_case (`temperature_c`, `pressure_hpa`, `speed_ms`), which every client can use directly. The

@@ -31,15 +31,44 @@ def router() -> Iterator[respx.MockRouter]:
         yield mock
 
 
-def test_demo_mode_serves_recorded_files(tmp_path: Path) -> None:
+@pytest.fixture
+def demo_client(tmp_path: Path) -> Iterator[TestClient]:
     shutil.copy(FIXTURES / "data_89064_2026-01-15_2026-01-16.json", tmp_path / "89064_2026-01.json")
     settings = Settings(_env_file=None, demo_mode=True, demo_data_dir=tmp_path)
-
     with TestClient(create_app(settings)) as client:
-        body = client.get(URL, params=PARAMS).json()
+        yield client
+
+
+def test_demo_mode_serves_recorded_files(demo_client: TestClient) -> None:
+    body = demo_client.get(URL, params=PARAMS).json()
 
     assert body["metadata"]["source"] == "demo"
+    assert "notice" not in body["metadata"]
     assert [row["samples"] for row in body["data"]] == EXPECTED_SAMPLES
+
+
+def test_demo_stations_report_their_recorded_range(demo_client: TestClient) -> None:
+    stations = {s["id"]: s for s in demo_client.get("/api/v1/stations").json()}
+
+    assert stations["juan-carlos-i"]["available_range"] == {
+        "start": "2026-01-15T01:00:00+01:00",
+        "end": "2026-01-16T01:00:00+01:00",
+    }
+    assert stations["gabriel-de-castilla"]["available_range"] is None
+
+
+def test_demo_query_outside_the_recordings_explains_why_it_is_empty(
+    demo_client: TestClient,
+) -> None:
+    params = {"start": "2026-02-01T00:00:00", "end": "2026-02-02T00:00:00"}
+
+    body = demo_client.get(URL, params=params).json()
+
+    assert body["metadata"]["count"] == 0
+    assert body["metadata"]["notice"] == (
+        "Demo mode: there is no recorded data in this range. Recorded data for Juan Carlos I "
+        "covers 2026-01-15T01:00:00+01:00 to 2026-01-16T01:00:00+01:00."
+    )
 
 
 def test_real_mode_calls_aemet_through_the_real_client(router: respx.MockRouter) -> None:
@@ -58,3 +87,12 @@ def test_real_mode_calls_aemet_through_the_real_client(router: respx.MockRouter)
 
     assert body["metadata"]["source"] == "aemet"
     assert [row["samples"] for row in body["data"]] == EXPECTED_SAMPLES
+
+
+def test_real_mode_cannot_tell_the_available_range() -> None:
+    settings = Settings(_env_file=None, aemet_api_key="test-key")
+
+    with TestClient(create_app(settings)) as client:
+        stations = client.get("/api/v1/stations").json()
+
+    assert all(station["available_range"] is None for station in stations)

@@ -52,6 +52,24 @@ def test_months_without_a_recording_are_empty(source: RecordedWeatherSource) -> 
     assert fetch(source, "2026-02-01T00:00:00", "2026-02-02T00:00:00") == []
 
 
+def test_available_range_spans_every_recorded_month(
+    source: RecordedWeatherSource, tmp_path: Path
+) -> None:
+    shutil.copy(FIXTURES / "data_89064_2023-03-25_2023-03-27.json", tmp_path / "89064_2023-03.json")
+
+    available = source.available_range(JUAN_CARLOS_I)
+
+    assert available is not None
+    assert (available.start, available.end) == (
+        utc("2023-03-25T00:00:00"),
+        utc("2026-01-16T00:00:00"),
+    )
+
+
+def test_station_without_recordings_has_no_available_range(source: RecordedWeatherSource) -> None:
+    assert source.available_range(get_station("gabriel-de-castilla")) is None
+
+
 def test_range_across_months_combines_the_available_recordings(
     source: RecordedWeatherSource,
 ) -> None:

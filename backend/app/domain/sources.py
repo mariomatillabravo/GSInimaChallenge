@@ -1,10 +1,19 @@
 """The port through which the application obtains observations, whatever their origin."""
 
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from app.domain.measurements import Observation
 from app.domain.stations import Station
+
+
+@dataclass(frozen=True, slots=True)
+class AvailableRange:
+    """First and last observation a source holds for a station (aware UTC datetimes)."""
+
+    start: datetime
+    end: datetime
 
 
 class WeatherSource(Protocol):
@@ -23,4 +32,17 @@ class WeatherSource(Protocol):
         Raises:
             UpstreamError: If the data cannot be obtained.
         """
+        ...
+
+
+@runtime_checkable
+class KnowsAvailableRange(Protocol):
+    """Optional capability of sources that know in advance which data they hold.
+
+    The recorded (demo) source has it; the AEMET client does not, since finding out would require
+    extra upstream calls. ``isinstance(source, KnowsAvailableRange)`` tells them apart at runtime.
+    """
+
+    def available_range(self, station: Station) -> AvailableRange | None:
+        """Return the span of the data held for ``station``, or ``None`` if there is none."""
         ...

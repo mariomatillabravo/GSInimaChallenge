@@ -12,6 +12,7 @@ from app.api.schemas import (
     ResponseMetadata,
     StationOut,
     StationRef,
+    TimeSpanOut,
 )
 from app.domain.aggregation import SeriesRow
 from app.domain.measurements import (
@@ -25,6 +26,7 @@ from app.domain.measurements import (
     Aggregation,
     MeasurementType,
 )
+from app.domain.sources import AvailableRange
 from app.domain.stations import Station
 from app.domain.timezones import OUTPUT_TIMEZONE, describe_timezone, format_output_datetime
 from app.services.measurements import MeasurementResult
@@ -36,7 +38,7 @@ CSV_ENCODING: Final = "utf-8-sig"
 """UTF-8 with a byte order mark, so that Excel on Windows shows the degree sign correctly."""
 
 
-def present_station(station: Station) -> StationOut:
+def present_station(station: Station, available: AvailableRange | None = None) -> StationOut:
     return StationOut(
         id=station.id,
         name=station.name,
@@ -46,6 +48,7 @@ def present_station(station: Station) -> StationOut:
         longitude=station.longitude,
         altitude_m=station.altitude_m,
         timezone=timezone_name(station.local_timezone),
+        available_range=_time_span(available) if available else None,
     )
 
 
@@ -54,8 +57,11 @@ def present_measurements(result: MeasurementResult) -> MeasurementsResponse:
     station, time_range = query.station, query.time_range
     aggregated = query.aggregation is not Aggregation.NONE
     with_period = query.aggregation in (Aggregation.DAILY, Aggregation.MONTHLY)
+    # Only fields that are set appear in the response, so ``notice`` is absent when not needed.
+    notice = {} if result.observation_count else {"notice": _no_data_notice(result)}
     return MeasurementsResponse(
         metadata=ResponseMetadata(
+            **notice,
             station=StationRef(
                 id=station.id,
                 name=station.name,
@@ -107,6 +113,28 @@ def csv_filename(response: MeasurementsResponse) -> str:
 def timezone_name(zone: tzinfo) -> str:
     """Display name of a time zone: ``UTC-03:00`` for the stations, the IANA key otherwise."""
     return zone.tzname(None) or describe_timezone(zone)
+
+
+def _no_data_notice(result: MeasurementResult) -> str:
+    station = result.query.station
+    if result.source == "aemet":
+        return (
+            "AEMET has no data for this range. The Antarctic stations mostly report during the "
+            "austral summer campaigns (roughly November to March)."
+        )
+    if result.available_range is None:
+        return f"Demo mode: there is no recorded data for {station.name}."
+    span = _time_span(result.available_range)
+    return (
+        f"Demo mode: there is no recorded data in this range. Recorded data for {station.name} "
+        f"covers {span.start} to {span.end}."
+    )
+
+
+def _time_span(span: AvailableRange) -> TimeSpanOut:
+    return TimeSpanOut(
+        start=format_output_datetime(span.start), end=format_output_datetime(span.end)
+    )
 
 
 def _row(

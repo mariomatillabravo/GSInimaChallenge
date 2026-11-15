@@ -164,6 +164,30 @@ class TestRawSeries:
         assert response.json()["metadata"]["count"] == 1
 
 
+class TestEmptyResults:
+    def test_empty_aemet_result_explains_the_seasonal_campaigns(
+        self, settings: Settings, source: FakeWeatherSource
+    ) -> None:
+        app = create_app(settings)
+        app.dependency_overrides[get_measurement_service] = lambda: MeasurementService(
+            source, "aemet"
+        )
+
+        with TestClient(app) as client:
+            response = client.get(
+                URL, params={"start": "2026-10-01T00:00:00", "end": "2026-10-02T00:00:00"}
+            )
+
+        assert "austral summer campaigns" in response.json()["metadata"]["notice"]
+
+    def test_empty_demo_result_without_any_recording(self, api: TestClient) -> None:
+        body = get_ok(api, start="2026-10-01T00:00:00", end="2026-10-02T00:00:00")
+
+        assert (
+            body["metadata"]["notice"] == "Demo mode: there is no recorded data for Juan Carlos I."
+        )
+
+
 class TestAggregatedSeries:
     def test_daily_rows_carry_period_and_quality_fields(
         self, api: TestClient, source: FakeWeatherSource
