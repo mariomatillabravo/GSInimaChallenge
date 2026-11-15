@@ -95,6 +95,13 @@ class CacheInfo(BaseModel):
             "all the requested data is final."
         ),
     )
+    stale: bool = Field(
+        description=(
+            "True when a month that should have been refreshed is served from an older copy "
+            "because AEMET failed; `last_updated` then tells how old it is. Also sent as "
+            "`X-Data-Stale`."
+        )
+    )
 
 
 class ResponseMetadata(BaseModel):

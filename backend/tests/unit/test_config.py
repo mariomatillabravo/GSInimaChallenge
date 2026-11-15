@@ -89,6 +89,7 @@ def test_cache_freshness_defaults_and_overrides() -> None:
         ttl=timedelta(hours=1), grace=timedelta(hours=48)
     )
     assert custom.freshness_policy == FreshnessPolicy(ttl=timedelta(minutes=15), grace=timedelta(0))
+    assert defaults.upstream_cooldown == timedelta(seconds=60)
 
 
 def test_app_refuses_to_start_without_valid_configuration(

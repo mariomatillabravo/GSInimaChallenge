@@ -110,6 +110,17 @@ def test_summary_of_a_request(months: list[MonthState], expected: CacheReport) -
     assert summarize(months, POLICY) == expected
 
 
+def test_a_stale_month_counts_as_served_from_the_cache_and_marks_the_report() -> None:
+    two_hours_ago = NOW - timedelta(hours=2)
+    november_stale = MonthState(
+        month("2026-11"), cached(two_hours_ago, key="2026-11"), fetched_now=False, stale=True
+    )
+
+    assert summarize([OCTOBER_FINAL, november_stale], POLICY) == CacheReport(
+        "hit", two_hours_ago, stale=True
+    )
+
+
 def test_last_updated_is_the_oldest_fetch_among_months_that_can_still_change() -> None:
     september_recent = state("2026-09", at("2026-10-01T06:00:00"), fetched_now=False)
     policy = FreshnessPolicy(ttl=timedelta(days=60), grace=timedelta(days=30))

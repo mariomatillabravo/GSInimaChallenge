@@ -16,6 +16,8 @@ router = APIRouter(prefix="/api/v1", tags=["measurements"])
 
 CACHE_STATUS_HEADER = "X-Cache-Status"
 """Repeats ``metadata.cache.status``, so CSV downloads (which have no metadata) carry it too."""
+DATA_STALE_HEADER = "X-Data-Stale"
+"""Repeats ``metadata.cache.stale`` as ``true`` or ``false``, for the same reason."""
 
 _RESPONSES: dict[int | str, dict[str, Any]] = {
     200: {
@@ -25,13 +27,24 @@ _RESPONSES: dict[int | str, dict[str, Any]] = {
             CACHE_STATUS_HEADER: {
                 "description": "`hit`, `miss` or `partial`, as in `metadata.cache.status`.",
                 "schema": {"type": "string"},
-            }
+            },
+            DATA_STALE_HEADER: {
+                "description": "`true` or `false`, as in `metadata.cache.stale`.",
+                "schema": {"type": "string"},
+            },
         },
     },
     404: {"model": ErrorResponse, "description": "Unknown station."},
     422: {"model": ErrorResponse, "description": "Invalid parameter (format, DST, range)."},
     502: {"model": ErrorResponse, "description": "AEMET failed or answered unexpectedly."},
-    503: {"model": ErrorResponse, "description": "AEMET is unreachable or rate limiting."},
+    503: {
+        "model": ErrorResponse,
+        "description": (
+            "AEMET is unreachable or rate limiting, and a month of the range has no cached copy. "
+            "Right after a failure AEMET is not called for a while; `Retry-After` then says when "
+            "to try again."
+        ),
+    },
     504: {"model": ErrorResponse, "description": "AEMET did not answer in time."},
 }
 
@@ -113,7 +126,10 @@ def get_measurements(
         types=parse_measurement_types(types),
     )
     body = present_measurements(service.get(query))
-    cache_header = {CACHE_STATUS_HEADER: body.metadata.cache.status}
+    cache_header = {
+        CACHE_STATUS_HEADER: body.metadata.cache.status,
+        DATA_STALE_HEADER: "true" if body.metadata.cache.stale else "false",
+    }
     if output_format is OutputFormat.CSV:
         return Response(
             content=render_csv(body),

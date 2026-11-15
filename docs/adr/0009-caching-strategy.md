@@ -99,8 +99,9 @@ cached copy may be served, and how a response tells the client where its data ca
 - Repeated and overlapping queries no longer reach AEMET, and finished campaigns are fetched only once.
 - The first request for a long range with an empty cache still fetches every month, one after another: a ten-year
   daily series means 120 upstream requests. Later requests for any part of it are local.
-- A failed fetch reaches the client as an error, even if an older copy of the month is cached, and nothing is
-  stored. Every request waiting for that fetch receives the same error after a single sequence of retries.
+- A failed fetch stores nothing, and every request waiting for it receives the same outcome after a single
+  sequence of retries. Serving an older copy instead of an error is decided in
+  [ADR-0010](0010-resilience.md).
 - Coalescing works within one process. With N worker processes, the same month can be fetched up to N times at
   once; replacing whole months keeps the stored result correct.
 - A wrong grace only delays or anticipates when a month becomes final: too short and a late record may be missed

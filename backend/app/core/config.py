@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     """How long a month that can still change is served from the cache before fetching it again."""
     cache_grace_hours: NonNegativeInt = 48
     """Hours after a month ends during which AEMET may still add data (delay to verify)."""
+    upstream_cooldown_seconds: PositiveInt = 60
+    """After a failed fetch, seconds during which AEMET is not called (cached copies are served)."""
 
     aemet_api_key: SecretStr | None = None
     """Personal AEMET OpenData API key. Never logged: ``SecretStr`` hides it in reprs."""
@@ -69,6 +71,10 @@ class Settings(BaseSettings):
         if self.cache_db_path is not None:
             return self.cache_db_path
         return Path("data/cache-demo.sqlite3" if self.demo_mode else "data/cache.sqlite3")
+
+    @property
+    def upstream_cooldown(self) -> timedelta:
+        return timedelta(seconds=self.upstream_cooldown_seconds)
 
     @property
     def freshness_policy(self) -> FreshnessPolicy:

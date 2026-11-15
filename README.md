@@ -97,7 +97,7 @@ curl "http://localhost:8000/api/v1/stations/juan-carlos-i/measurements?start=202
     "output_timezone": "Europe/Madrid",
     "station_timezone": "UTC-03:00",
     "source": "aemet",
-    "cache": {"status": "miss", "last_updated": null},
+    "cache": {"status": "miss", "last_updated": null, "stale": false},
     "count": 2
   },
   "fields": {
@@ -123,7 +123,8 @@ the requested range touches two station days. The first one only contributes its
 
 `metadata.cache` tells whether the data came from the [cache](#cache): this was the first request for January
 2026, so it was fetched (`miss`); repeating it gives `hit`. `last_updated` is `null` because January can no
-longer change. The same status is sent in the `X-Cache-Status` header, also on CSV downloads.
+longer change, and `stale` is `false` because nothing had to be served from an outdated copy. The same values are
+sent in the `X-Cache-Status` and `X-Data-Stale` headers, also on CSV downloads.
 
 ### Empty results
 
@@ -161,7 +162,9 @@ degree sign correctly.
 
 ### Errors
 
-Every error has the same shape, and the HTTP status tells whether the problem is in the request or upstream:
+Every error has the same shape, and the HTTP status tells whether the problem is in the request or upstream.
+Upstream errors only reach the client when a month of the range has no cached copy (see
+[When AEMET fails](#when-aemet-fails)):
 
 ```json
 {"error": {"code": "invalid_parameter", "message": "'2026-10-25T02:30:00' is ambiguous in Europe/Madrid: ...", "parameter": "start"}}
@@ -172,7 +175,7 @@ Every error has the same shape, and the HTTP status tells whether the problem is
 | 422 | `invalid_parameter` | Malformed or inconsistent parameter, non-existent or ambiguous local time, range too long |
 | 404 | `not_found` | Unknown station (the message lists the valid ones) |
 | 502 | `upstream_error` | AEMET failed, rejected the API key or answered unexpectedly |
-| 503 | `upstream_unavailable` | AEMET is unreachable or rate limiting, even after retrying |
+| 503 | `upstream_unavailable` | AEMET is unreachable or rate limiting, even after retrying, or it failed less than `UPSTREAM_COOLDOWN_SECONDS` ago and is not being called (the `Retry-After` header says when to try again) |
 | 504 | `upstream_timeout` | AEMET did not answer in time, even after retrying |
 | 500 | `internal_error` | Unexpected error; details stay in the server logs |
 
@@ -204,7 +207,7 @@ documented in [`backend/tests/fixtures/aemet/`](backend/tests/fixtures/aemet/REA
 - Transient failures (network errors, timeouts, rate limiting, HTTP 5xx) are **retried with exponential
   backoff**. A rejected API key is not retried.
 - Persistent failures are classified so the API can report them as **503** (unreachable or rate limited),
-  **504** (timeout) or **502** (any other upstream failure).
+  **504** (timeout) or **502** (any other upstream failure), unless a cached copy can be served instead.
 
 ### Data cleaning
 
@@ -356,6 +359,22 @@ month was fetched) or `partial`, also sent as the `X-Cache-Status` header. `meta
 oldest fetch time among the months that can still change, in Madrid time, or `null` when all the requested data
 is final. The full reasoning is in [ADR-0009](docs/adr/0009-caching-strategy.md).
 
+### When AEMET fails
+
+AEMET is retried a few times on every fetch. When a fetch still fails:
+
+- an **expired month that has a cached copy is served from that copy**: the response is a normal 200 with
+  `metadata.cache.stale: true` (and `X-Data-Stale: true`), and `last_updated` tells how old the copy is;
+- a **month without a copy** makes the request fail with the error in the table above, because a range is never
+  served incomplete without saying so;
+- **AEMET is not called again for `UPSTREAM_COOLDOWN_SECONDS`** (60 s), a pattern known as a circuit breaker.
+  Meanwhile, cached copies are served at once and months without a copy fail at once with 503 and a
+  `Retry-After` header, instead of every request waiting for a new round of retries (which can take more than a
+  minute when AEMET times out). After the cool-down, the next request tries AEMET again.
+
+Final months never need AEMET, so they are always served. Requests waiting for the same failed fetch all get the
+copy (or the error) together. The reasoning is in [ADR-0010](docs/adr/0010-resilience.md).
+
 ### Storage
 
 - **One file per mode** by default: `backend/data/cache.sqlite3` for real data and
@@ -395,6 +414,7 @@ its context, the options considered and its consequences.
 | [0007](docs/adr/0007-concurrency-model.md) | Synchronous request handling: SQLite and pandas block, so `def` endpoints in the thread pool are correct by construction |
 | [0008](docs/adr/0008-cache-storage.md) | SQLite through SQLAlchemy Core for the cache: one file per mode, rebuilt instead of migrated, WAL and `BEGIN IMMEDIATE` writes for safe concurrency |
 | [0009](docs/adr/0009-caching-strategy.md) | Cache-first by UTC month: final months are kept forever, months that can still change expire after a TTL, empty months are cached, concurrent fetches of a month are coalesced, and every response reports how it was served |
+| [0010](docs/adr/0010-resilience.md) | When AEMET fails, expired months are served from their cached copy marked as stale, and a circuit breaker stops calling AEMET for a cool-down so no request waits for retries in vain |
 
 ## Development
 
@@ -417,6 +437,7 @@ git-ignored. To start, copy [`backend/.env.example`](backend/.env.example) to `b
 | `CACHE_DB_PATH` | `data/cache.sqlite3`, or `data/cache-demo.sqlite3` in demo mode | SQLite file of the cache, relative to `backend/` |
 | `CACHE_TTL_MINUTES` | `60` | How long a month that can still change is served from the cache before it is fetched again |
 | `CACHE_GRACE_HOURS` | `48` | Hours after a month ends during which AEMET may still add data; a month fetched later is final |
+| `UPSTREAM_COOLDOWN_SECONDS` | `60` | After a failed fetch, seconds during which AEMET is not called and cached copies are served |
 | `AEMET_API_KEY` | none | Personal AEMET OpenData API key. Required when `DEMO_MODE` is `false`. |
 | `AEMET_BASE_URL` | `https://opendata.aemet.es/opendata` | AEMET OpenData base URL |
 | `AEMET_TIMEOUT_SECONDS` | `30` | Timeout of each HTTP request to AEMET |
@@ -455,6 +476,6 @@ Run them from the repository root.
 | Part | Scope | Status |
 |---|---|---|
 | Part 1 | API with time zone and DST handling, aggregation, data quality fields, CSV export, demo mode, Docker | Done |
-| Part 2 | SQLite cache of AEMET data, resilience when AEMET fails, structured logging | In progress: the cache serves every request |
+| Part 2 | SQLite cache of AEMET data, resilience when AEMET fails, structured logging | In progress: cache and resilience done, structured logging to do |
 | Part 3 | TypeScript front-end with table and charts | To do |
 | Extras | Wind-energy metrics (cubic mean speed, maximum speed, air density, wind power density), CI polish | To do |

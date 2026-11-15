@@ -1,12 +1,13 @@
 """Use case: obtain the measurements of a station for a time range, aggregated as requested."""
 
 import logging
-from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timedelta
 from functools import partial
 from typing import Literal
 
+from app.core.clock import Clock, utc_now
+from app.core.exceptions import UpstreamCoolingDownError, UpstreamError
 from app.db.repository import CacheRepository
 from app.domain.aggregation import SeriesRow, build_series
 from app.domain.chunks import CachedChunk, MonthChunk, month_chunks
@@ -15,6 +16,7 @@ from app.domain.measurements import Aggregation, MeasurementType
 from app.domain.sources import AvailableRange, KnowsAvailableRange, WeatherSource
 from app.domain.stations import Station
 from app.domain.time_range import TimeRange
+from app.services.circuit import DEFAULT_COOLDOWN, CircuitBreaker
 from app.services.coalescing import SingleFlight
 
 logger = logging.getLogger(__name__)
@@ -23,13 +25,6 @@ SourceLabel = Literal["aemet", "demo"]
 
 MonthKey = tuple[str, str]
 """Station identifier and month (``"YYYY-MM"``): the unit of work that fetches are grouped by."""
-
-Clock = Callable[[], datetime]
-"""Returns the current time, aware and in UTC. Injected so tests can control time."""
-
-
-def utc_now() -> datetime:
-    return datetime.now(UTC)
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +60,10 @@ class MeasurementService:
     2. fetches the months that are missing or expired (see ``app.domain.freshness``) and stores
        them, replacing any older copy; concurrent requests for the same month share one fetch;
     3. reads the whole range from the cache and aggregates it.
+
+    When a fetch fails, an expired month that has a cached copy is served stale, and the source
+    is not called again for a cool-down period (circuit breaker). A month without a copy makes
+    the request fail.
     """
 
     def __init__(
@@ -75,6 +74,7 @@ class MeasurementService:
         policy: FreshnessPolicy,
         clock: Clock = utc_now,
         flights: SingleFlight[MonthKey, tuple[CachedChunk, bool]] | None = None,
+        cooldown: timedelta = DEFAULT_COOLDOWN,
     ) -> None:
         self._source = source
         self._source_label = source_label
@@ -82,6 +82,7 @@ class MeasurementService:
         self._policy = policy
         self._clock = clock
         self._flights = flights if flights is not None else SingleFlight()
+        self._breaker = CircuitBreaker(cooldown, clock)
 
     @property
     def source_label(self) -> SourceLabel:
@@ -132,9 +133,22 @@ class MeasurementService:
                 continue
             # Concurrent requests for the same month share one fetch and its outcome. A request
             # that waited for another one's fetch reports the month as fetched: it waited for it.
-            entry, fetched = self._flights.run(
-                (station.id, chunk.key), partial(self._fetch_month, station, chunk, now)
-            )
+            try:
+                entry, fetched = self._flights.run(
+                    (station.id, chunk.key), partial(self._fetch_month, station, chunk, now)
+                )
+            except UpstreamError as error:
+                if current is None:
+                    raise
+                logger.warning(
+                    "Serving %s %s as cached at %s: %s",
+                    station.id,
+                    chunk.key,
+                    current.fetched_at.isoformat(),
+                    error,
+                )
+                months.append(MonthState(chunk, current, fetched_now=False, stale=True))
+                continue
             months.append(MonthState(chunk, entry, fetched_now=fetched))
         return summarize(months, self._policy)
 
@@ -151,8 +165,16 @@ class MeasurementService:
         current = self._repository.cached_chunks(station.id, [chunk.key]).get(chunk.key)
         if current is not None and not needs_fetch(chunk, current, now, self._policy):
             return current, False
-        # The month in progress is fetched up to now; nothing exists after it.
-        observations = self._source.fetch(station, chunk.start, min(chunk.end, now))
+        retry_after = self._breaker.retry_after_seconds()
+        if retry_after is not None:
+            raise UpstreamCoolingDownError(retry_after)
+        try:
+            # The month in progress is fetched up to now; nothing exists after it.
+            observations = self._source.fetch(station, chunk.start, min(chunk.end, now))
+        except UpstreamError:
+            self._breaker.record_failure()
+            raise
+        self._breaker.record_success()
         self._repository.save_chunk(station.id, chunk, observations, fetched_at=now)
         logger.info(
             "Fetched %s %s from %s: %d observations.",

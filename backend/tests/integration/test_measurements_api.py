@@ -59,20 +59,33 @@ def grid(start: str, count: int, temperature: float | None = 1.0) -> list[Observ
 ServiceFactory = Callable[[FakeWeatherSource, SourceLabel], MeasurementService]
 
 
+class FakeClock:
+    def __init__(self) -> None:
+        self.now = NOW
+
+    def __call__(self) -> datetime:
+        return self.now
+
+
+@pytest.fixture
+def clock() -> FakeClock:
+    return FakeClock()
+
+
 @pytest.fixture
 def source() -> FakeWeatherSource:
     return FakeWeatherSource()
 
 
 @pytest.fixture
-def make_service(tmp_path: Path) -> Iterator[ServiceFactory]:
-    """Build a service over a source, with its own cache file and the clock fixed at ``NOW``."""
+def make_service(tmp_path: Path, clock: FakeClock) -> Iterator[ServiceFactory]:
+    """Build a service over a source, with its own cache file and a clock that starts at ``NOW``."""
     engines: list[Engine] = []
 
     def make(source: FakeWeatherSource, label: SourceLabel) -> MeasurementService:
         engine = open_database(tmp_path / f"service-{label}.sqlite3", data_source=label)
         engines.append(engine)
-        return MeasurementService(source, label, CacheRepository(engine), POLICY, clock=lambda: NOW)
+        return MeasurementService(source, label, CacheRepository(engine), POLICY, clock=clock)
 
     yield make
     for engine in engines:
@@ -119,7 +132,7 @@ class TestRawSeries:
             "output_timezone": "Europe/Madrid",
             "station_timezone": "UTC-03:00",
             "source": "demo",
-            "cache": {"status": "miss", "last_updated": None},
+            "cache": {"status": "miss", "last_updated": None, "stale": False},
             "count": 3,
         }
         assert body["data"][0] == {
@@ -450,7 +463,12 @@ class TestCacheMetadata:
 
         assert first.headers["X-Cache-Status"] == "miss"
         assert second.headers["X-Cache-Status"] == "hit"
-        assert second.json()["metadata"]["cache"] == {"status": "hit", "last_updated": None}
+        assert second.headers["X-Data-Stale"] == "false"
+        assert second.json()["metadata"]["cache"] == {
+            "status": "hit",
+            "last_updated": None,
+            "stale": False,
+        }
         assert second.json()["data"] == first.json()["data"]
         assert len(source.calls) == 1
 
@@ -460,6 +478,7 @@ class TestCacheMetadata:
         assert body["metadata"]["cache"] == {
             "status": "miss",
             "last_updated": "2026-11-15T13:00:00+01:00",  # NOW in Madrid time
+            "stale": False,
         }
 
     def test_csv_downloads_carry_the_cache_status_header(self, api: TestClient) -> None:
@@ -467,3 +486,52 @@ class TestCacheMetadata:
 
         assert api.get(URL, params=params).headers["X-Cache-Status"] == "miss"
         assert api.get(URL, params=params).headers["X-Cache-Status"] == "hit"
+
+
+NOVEMBER_10 = {"start": "2026-11-10T00:00:00Z", "end": "2026-11-11T00:00:00Z"}
+
+
+class TestStaleData:
+    def test_an_expired_month_is_served_stale_when_aemet_fails(
+        self, api: TestClient, source: FakeWeatherSource, clock: FakeClock
+    ) -> None:
+        source.observations = grid("2026-11-10T00:00:00", 3)
+        get_ok(api, **NOVEMBER_10)
+        clock.now = NOW + timedelta(hours=2)  # November has expired
+        source.error = UpstreamUnavailableError("AEMET could not be reached.")
+
+        response = api.get(URL, params=NOVEMBER_10)
+        csv = api.get(URL, params={**NOVEMBER_10, "format": "csv"})
+
+        assert response.status_code == 200
+        assert response.json()["metadata"]["cache"] == {
+            "status": "hit",
+            "last_updated": "2026-11-15T13:00:00+01:00",  # the copy being served
+            "stale": True,
+        }
+        assert response.json()["metadata"]["count"] == 3
+        assert (response.headers["X-Cache-Status"], response.headers["X-Data-Stale"]) == (
+            "hit",
+            "true",
+        )
+        assert csv.headers["X-Data-Stale"] == "true"
+
+    def test_a_month_without_a_copy_fails_fast_while_aemet_is_cooling_down(
+        self, api: TestClient, source: FakeWeatherSource, clock: FakeClock
+    ) -> None:
+        get_ok(api, **NOVEMBER_10)
+        clock.now = NOW + timedelta(hours=2)
+        source.error = UpstreamUnavailableError("AEMET could not be reached.")
+        api.get(URL, params=NOVEMBER_10)  # the failed refresh opens the circuit
+        calls_so_far = len(source.calls)
+        clock.now += timedelta(seconds=15)
+
+        response = api.get(
+            URL, params={"start": "2026-09-10T00:00:00Z", "end": "2026-09-11T00:00:00Z"}
+        )
+
+        assert response.status_code == 503
+        assert response.headers["Retry-After"] == "45"
+        assert response.json()["error"]["code"] == "upstream_unavailable"
+        assert "Try again in 45 seconds" in response.json()["error"]["message"]
+        assert len(source.calls) == calls_so_far  # AEMET was not called

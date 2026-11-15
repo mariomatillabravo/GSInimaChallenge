@@ -71,6 +71,7 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             source_label=label,
             repository=CacheRepository(engine),
             policy=settings.freshness_policy,
+            cooldown=settings.upstream_cooldown,
         )
         yield
 

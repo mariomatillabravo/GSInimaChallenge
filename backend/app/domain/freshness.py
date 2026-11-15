@@ -31,6 +31,8 @@ class MonthState:
     cached: CachedChunk
     fetched_now: bool
     """Whether it was fetched from the source for this request."""
+    stale: bool = False
+    """Whether it had expired but could not be fetched, so an older copy is served."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,6 +43,8 @@ class CacheReport:
     """``hit``: nothing had to be fetched; ``miss``: every month was fetched; ``partial``: a mix."""
     last_updated: datetime | None
     """Oldest fetch time among the months that can still change; ``None`` if all are final."""
+    stale: bool = False
+    """Whether an expired month was served because the source failed."""
 
 
 def is_final(chunk: MonthChunk, cached: CachedChunk, policy: FreshnessPolicy) -> bool:
@@ -61,7 +65,11 @@ def needs_fetch(
 
 
 def summarize(months: Sequence[MonthState], policy: FreshnessPolicy) -> CacheReport:
-    """Build the cache report of a request from the months it used."""
+    """Build the cache report of a request from the months it used.
+
+    A stale month was not fetched, so it counts like a cache hit; its old fetch time takes part
+    in ``last_updated`` like that of any month that can still change.
+    """
     fetched = sum(month.fetched_now for month in months)
     status: CacheStatus
     if fetched == 0:
@@ -75,4 +83,8 @@ def summarize(months: Sequence[MonthState], policy: FreshnessPolicy) -> CacheRep
         for month in months
         if not is_final(month.chunk, month.cached, policy)
     ]
-    return CacheReport(status=status, last_updated=min(changing, default=None))
+    return CacheReport(
+        status=status,
+        last_updated=min(changing, default=None),
+        stale=any(month.stale for month in months),
+    )

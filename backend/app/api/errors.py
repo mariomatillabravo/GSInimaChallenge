@@ -15,6 +15,7 @@ from app.core.exceptions import (
     AppError,
     InvalidParameterError,
     NotFoundError,
+    UpstreamCoolingDownError,
     UpstreamError,
     UpstreamTimeoutError,
     UpstreamUnavailableError,
@@ -50,7 +51,10 @@ async def _handle_app_error(request: Request, error: Exception) -> JSONResponse:
         if isinstance(error, error_type):
             if isinstance(error, InvalidParameterError):
                 return error_response(status_code, code, error.message, error.parameter)
-            return error_response(status_code, code, str(error))
+            response = error_response(status_code, code, str(error))
+            if isinstance(error, UpstreamCoolingDownError):
+                response.headers["Retry-After"] = str(error.retry_after_seconds)
+            return response
     return await _handle_unexpected_error(request, error)
 
 

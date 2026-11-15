@@ -53,3 +53,14 @@ class UpstreamUnavailableError(UpstreamError):
 
 class UpstreamTimeoutError(UpstreamError):
     """AEMET did not answer in time, even after retrying."""
+
+
+class UpstreamCoolingDownError(UpstreamUnavailableError):
+    """AEMET failed recently, so it is not called again until a cool-down period ends."""
+
+    def __init__(self, retry_after_seconds: int) -> None:
+        self.retry_after_seconds = retry_after_seconds
+        super().__init__(
+            "AEMET failed recently and is not being called for a while. "
+            f"Try again in {retry_after_seconds} seconds."
+        )

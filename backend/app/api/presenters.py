@@ -83,6 +83,7 @@ def present_measurements(result: MeasurementResult) -> MeasurementsResponse:
                     if result.cache.last_updated is not None
                     else None
                 ),
+                stale=result.cache.stale,
             ),
             count=len(result.rows),
         ),

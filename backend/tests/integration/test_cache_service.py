@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import Engine
 
-from app.core.exceptions import UpstreamUnavailableError
+from app.core.exceptions import UpstreamCoolingDownError, UpstreamUnavailableError
 from app.db.database import open_database
 from app.db.repository import CacheRepository
 from app.domain.chunks import CachedChunk
@@ -248,9 +248,14 @@ def wait_until(condition: Callable[[], bool]) -> None:
         time.sleep(0.005)
 
 
-def request_january_concurrently(
-    service: MeasurementService, source: CountingSource, flights: Flights, requests: int
+def request_concurrently(
+    service: MeasurementService,
+    source: CountingSource,
+    flights: Flights,
+    requests: int,
+    day: str = "2026-01-15",
 ) -> list[MeasurementResult | BaseException]:
+    """Send ``requests`` concurrent requests for the first hour of ``day``."""
     started, release = threading.Event(), threading.Event()
 
     def hold_the_fetch() -> None:
@@ -263,7 +268,7 @@ def request_january_concurrently(
 
     def request() -> None:
         try:
-            outcomes.append(get(service, "2026-01-15T00:00:00", "2026-01-15T01:00:00"))
+            outcomes.append(get(service, f"{day}T00:00:00", f"{day}T01:00:00"))
         except BaseException as error:
             outcomes.append(error)
 
@@ -273,7 +278,7 @@ def request_january_concurrently(
     others = [threading.Thread(target=request) for _ in range(requests - 1)]
     for thread in others:
         thread.start()
-    wait_until(lambda: flights.waiting((STATION.id, "2026-01")) == requests - 1)
+    wait_until(lambda: flights.waiting((STATION.id, day[:7])) == requests - 1)
     release.set()
     for thread in [first, *others]:
         thread.join(TIMEOUT)
@@ -285,7 +290,7 @@ def test_concurrent_requests_for_the_same_month_share_one_fetch(
 ) -> None:
     source.observations = grid("2026-01-15T00:00:00", 144)
 
-    outcomes = request_january_concurrently(service, source, flights, requests=10)
+    outcomes = request_concurrently(service, source, flights, requests=10)
 
     assert len(source.calls) == 1
     assert all(isinstance(outcome, MeasurementResult) for outcome in outcomes)
@@ -304,7 +309,7 @@ def test_a_failed_fetch_reaches_every_waiting_request_without_being_repeated(
     error = UpstreamUnavailableError("AEMET could not be reached.")
     source.error = error
 
-    outcomes = request_january_concurrently(service, source, flights, requests=10)
+    outcomes = request_concurrently(service, source, flights, requests=10)
 
     assert outcomes == [error] * 10
     assert len(source.calls) == 1
@@ -366,3 +371,87 @@ def test_a_month_stored_after_the_first_check_is_not_fetched_again(
     assert views == ["first", "second"]
     assert result.cache.status == "hit"
     assert len(source.calls) == 1
+
+
+# AEMET failures with a cached copy: stale data and the circuit breaker (60-second cool-down).
+
+
+def cache_november_then_fail(
+    service: MeasurementService, source: CountingSource, clock: FakeClock
+) -> None:
+    """Cache November at NOW, let it expire and make the source fail."""
+    source.observations = grid("2026-11-10T00:00:00", 6)
+    get(service, "2026-11-10T00:00:00", "2026-11-11T00:00:00")
+    clock.advance(timedelta(hours=2))
+    source.error = UpstreamUnavailableError("AEMET could not be reached.")
+
+
+def test_an_expired_month_is_served_stale_when_the_fetch_fails(
+    service: MeasurementService,
+    source: CountingSource,
+    clock: FakeClock,
+    repository: CacheRepository,
+) -> None:
+    cache_november_then_fail(service, source, clock)
+
+    result = get(service, "2026-11-10T00:00:00", "2026-11-11T00:00:00")
+
+    assert result.cache == CacheReport("hit", NOW, stale=True)
+    assert result.observation_count == 6
+    assert len(source.calls) == 2  # the refresh was attempted
+    assert repository.cached_chunks(STATION.id, ["2026-11"])["2026-11"].fetched_at == NOW
+
+
+def test_while_cooling_down_the_source_is_not_called(
+    service: MeasurementService, source: CountingSource, clock: FakeClock
+) -> None:
+    cache_november_then_fail(service, source, clock)
+    get(service, "2026-11-10T00:00:00", "2026-11-11T00:00:00")  # fails and opens the circuit
+    clock.advance(timedelta(seconds=10))
+
+    stale = get(service, "2026-11-10T00:00:00", "2026-11-11T00:00:00")
+    with pytest.raises(UpstreamCoolingDownError) as no_copy:
+        get(service, "2026-09-10T00:00:00", "2026-09-11T00:00:00")
+
+    assert stale.cache.stale
+    assert no_copy.value.retry_after_seconds == 50
+    assert len(source.calls) == 2  # neither request reached the source
+
+
+def test_final_months_are_unaffected_while_cooling_down(
+    service: MeasurementService, source: CountingSource, clock: FakeClock
+) -> None:
+    get(service, "2026-01-15T00:00:00", "2026-01-16T00:00:00")
+    cache_november_then_fail(service, source, clock)
+    get(service, "2026-11-10T00:00:00", "2026-11-11T00:00:00")  # opens the circuit
+
+    result = get(service, "2026-01-15T00:00:00", "2026-01-16T00:00:00")
+
+    assert result.cache == CacheReport("hit", None, stale=False)
+
+
+def test_after_the_cooldown_the_source_is_tried_again(
+    service: MeasurementService, source: CountingSource, clock: FakeClock
+) -> None:
+    cache_november_then_fail(service, source, clock)
+    get(service, "2026-11-10T00:00:00", "2026-11-11T00:00:00")  # opens the circuit
+    clock.advance(timedelta(seconds=60))
+    source.error = None  # AEMET is back
+
+    result = get(service, "2026-11-10T00:00:00", "2026-11-11T00:00:00")
+
+    assert result.cache == CacheReport("miss", clock.now, stale=False)
+    assert len(source.calls) == 3
+
+
+def test_concurrent_requests_all_get_the_stale_copy_after_one_failed_fetch(
+    service: MeasurementService, source: CountingSource, clock: FakeClock, flights: Flights
+) -> None:
+    cache_november_then_fail(service, source, clock)
+
+    outcomes = request_concurrently(service, source, flights, requests=10, day="2026-11-10")
+
+    results = [outcome for outcome in outcomes if isinstance(outcome, MeasurementResult)]
+    assert len(results) == 10, outcomes
+    assert all(result.cache.stale for result in results)
+    assert len(source.calls) == 2  # the first caching fetch and one shared failed refresh
