@@ -93,9 +93,19 @@ repeated hour appears twice, each time with its own offset:
 | `2026-10-25T01:30:00Z` | `2026-10-25T02:30:00+01:00` |
 
 Clients should therefore compare and sort by the full datetime with its offset, never by the local wall-clock
-text. The DST test suite lives in [`test_dst_input.py`](backend/tests/unit/test_dst_input.py) and
-[`test_dst_output.py`](backend/tests/unit/test_dst_output.py), and property-based tests check that every other
-instant survives the round trip to Madrid time and back.
+text.
+
+Aggregated output behaves consistently:
+
+| Aggregation | Around spring forward (2026-03-29) | Around fall back (2026-10-25) |
+|---|---|---|
+| Hourly | `01:00+01:00` is followed by `03:00+02:00`: there is no 02:00 row, and no data is lost | `02:00+02:00` and `02:00+01:00` are two different rows, six samples each |
+| Daily | Station days stay 144 slots long; their labels move from `04:00+01:00` to `05:00+02:00` | Station days stay 144 slots long (not 25 hours); labels move from `05:00+02:00` to `04:00+01:00` |
+
+The DST test suite lives in [`test_dst_input.py`](backend/tests/unit/test_dst_input.py),
+[`test_dst_output.py`](backend/tests/unit/test_dst_output.py) and
+[`test_dst_aggregation.py`](backend/tests/unit/test_dst_aggregation.py), and property-based tests check that every
+other instant survives the round trip to Madrid time and back.
 
 ### Station local time
 
