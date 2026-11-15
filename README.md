@@ -26,6 +26,29 @@ range, `"NaN"` for missing values, data availability) was verified against the r
 [docs/aemet-api.md](docs/aemet-api.md). A few real responses are included as test fixtures; their origin is
 documented in [`backend/tests/fixtures/aemet/`](backend/tests/fixtures/aemet/README.md).
 
+### How the service reads AEMET
+
+- A requested range is split into **calendar months in UTC**, the longest range AEMET accepts per request.
+- Each month follows AEMET's two-step protocol, and the outcome is read from the `estado` field of the envelope.
+  "No data" is a valid empty result, not an error.
+- Transient failures (network errors, timeouts, rate limiting, HTTP 5xx) are **retried with exponential
+  backoff**. A rejected API key is not retried.
+- Persistent failures are classified so the API can report them as **503** (unreachable or rate limited),
+  **504** (timeout) or **502** (any other upstream failure).
+
+### Data cleaning
+
+Every record goes through the same rule, both for live responses and for recorded ones:
+
+| Situation | Treatment |
+|---|---|
+| A value is `"NaN"`, `null`, non-numeric or absent | That value is missing |
+| The record is flagged as bad quality (`qdato = 1`) | All its values are missing |
+| No value is left, or the timestamp is invalid | The record is discarded |
+| Records arrive unsorted or repeated | They are sorted by time; a repeated timestamp keeps the last record |
+
+The design is explained in [ADR-0004](docs/adr/0004-aemet-client.md).
+
 ## Time zone handling
 
 | Where | Time zone |
@@ -91,6 +114,7 @@ its context, the options considered and its consequences.
 | [0001](docs/adr/0001-web-framework.md) | FastAPI as the web framework: typed validation, generated OpenAPI docs and dependency injection that makes the AEMET client easy to replace in tests and demo mode |
 | [0002](docs/adr/0002-time-zone-strategy.md) | UTC inside the service, Europe/Madrid as default input and as output zone, fixed `UTC-03:00` for station days, inclusive ranges |
 | [0003](docs/adr/0003-dst-input-policy.md) | Non-existent and ambiguous local times are rejected with HTTP 422 instead of being guessed |
+| [0004](docs/adr/0004-aemet-client.md) | A `WeatherSource` port with an AEMET client and a recorded source sharing one pure parser; monthly windows, retries, data cleaning and upstream error classification |
 
 ## Development
 
@@ -109,6 +133,9 @@ git-ignored. To start, copy [`backend/.env.example`](backend/.env.example) to `b
 |---|---|---|
 | `DEMO_MODE` | `false` | Serve recorded AEMET responses instead of calling the real API. No API key is needed. |
 | `AEMET_API_KEY` | none | Personal AEMET OpenData API key. Required when `DEMO_MODE` is `false`. |
+| `AEMET_BASE_URL` | `https://opendata.aemet.es/opendata` | AEMET OpenData base URL |
+| `AEMET_TIMEOUT_SECONDS` | `30` | Timeout of each HTTP request to AEMET |
+| `AEMET_MAX_ATTEMPTS` | `3` | Attempts per monthly window when AEMET fails transiently |
 | `MAX_RANGE_DAYS_NONE` | `31` | Longest range accepted without aggregation (about 4,500 ten-minute records) |
 | `MAX_RANGE_DAYS_HOURLY` | `366` | Longest range accepted with hourly aggregation |
 | `MAX_RANGE_DAYS_DAILY` | `3660` | Longest range accepted with daily aggregation (ten years) |

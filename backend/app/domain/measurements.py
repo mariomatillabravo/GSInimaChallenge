@@ -1,6 +1,7 @@
 """Measurement types, aggregation levels and how measurements are named for clients."""
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Final
@@ -54,3 +55,26 @@ MEASUREMENT_FIELDS: Final[MappingProxyType[MeasurementType, MeasurementField]] =
 
 STATION_LABEL: Final = "Station"
 DATETIME_LABEL: Final = "Datetime"
+
+
+@dataclass(frozen=True, slots=True)
+class Observation:
+    """One cleaned 10-minute observation of a station.
+
+    A value is ``None`` when it is missing upstream or flagged as bad quality. An observation
+    always has at least one value; records without any usable value are discarded when parsing.
+    """
+
+    timestamp: datetime
+    """Timezone-aware, in UTC."""
+    temperature: float | None
+    pressure: float | None
+    speed: float | None
+
+    def value(self, kind: MeasurementType) -> float | None:
+        """Return the value of the given measurement type."""
+        return {
+            MeasurementType.TEMPERATURE: self.temperature,
+            MeasurementType.PRESSURE: self.pressure,
+            MeasurementType.SPEED: self.speed,
+        }[kind]

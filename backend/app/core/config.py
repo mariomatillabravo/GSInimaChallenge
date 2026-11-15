@@ -2,7 +2,7 @@
 
 from typing import Self
 
-from pydantic import PositiveInt, SecretStr, field_validator, model_validator
+from pydantic import PositiveFloat, PositiveInt, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.domain.measurements import Aggregation
@@ -22,6 +22,12 @@ class Settings(BaseSettings):
 
     aemet_api_key: SecretStr | None = None
     """Personal AEMET OpenData API key. Never logged: ``SecretStr`` hides it in reprs."""
+
+    aemet_base_url: str = "https://opendata.aemet.es/opendata"
+    aemet_timeout_seconds: PositiveFloat = 30.0
+    """Timeout of each HTTP request to AEMET."""
+    aemet_max_attempts: PositiveInt = 3
+    """Attempts per monthly window when AEMET fails transiently (network, 429, 5xx)."""
 
     # Maximum requested range per aggregation level, which keeps every response bounded in size.
     max_range_days_none: PositiveInt = 31

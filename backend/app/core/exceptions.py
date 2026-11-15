@@ -41,3 +41,15 @@ class AmbiguousLocalTimeError(InvalidParameterError):
 
 class RangeTooLargeError(InvalidParameterError):
     """The requested range exceeds the maximum allowed for the aggregation level."""
+
+
+class UpstreamError(AppError):
+    """AEMET answered with an error or with a response that cannot be understood."""
+
+
+class UpstreamUnavailableError(UpstreamError):
+    """AEMET cannot be reached or is rate limiting us, even after retrying."""
+
+
+class UpstreamTimeoutError(UpstreamError):
+    """AEMET did not answer in time, even after retrying."""
