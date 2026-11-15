@@ -164,7 +164,8 @@ degree sign correctly.
 
 Every error has the same shape, and the HTTP status tells whether the problem is in the request or upstream.
 Upstream errors only reach the client when a month of the range has no cached copy (see
-[When AEMET fails](#when-aemet-fails)):
+[When AEMET fails](#when-aemet-fails)). Every response, errors included, carries an `X-Request-ID` header that
+identifies its lines in the [logs](#logging):
 
 ```json
 {"error": {"code": "invalid_parameter", "message": "'2026-10-25T02:30:00' is ambiguous in Europe/Madrid: ...", "parameter": "start"}}
@@ -398,6 +399,40 @@ copy (or the error) together. The reasoning is in [ADR-0010](docs/adr/0010-resil
 Library choice, schema, transaction handling and SQLite's limits are discussed in
 [ADR-0008](docs/adr/0008-cache-storage.md).
 
+## Logging
+
+Every log line is tagged with the **ID of the request** being served, so all the lines of one request can be
+found together. Two formats, chosen with `LOG_FORMAT`:
+
+- `text` (default, for a terminal):
+
+  ```text
+  2026-11-15T21:23:13.449Z INFO docs-example-1 app.services.measurements: Fetched juan-carlos-i 2025-03 from demo: 4454 observations.
+  2026-11-15T21:23:13.459Z INFO docs-example-1 app.access: GET /api/v1/stations/juan-carlos-i/measurements?start=2025-03-30T00:00:00&end=2025-03-30T06:00:00&aggregation=hourly 200 87.8 ms
+  ```
+
+- `json` (used by Docker Compose): one JSON object per line, ready for a log platform:
+
+  ```json
+  {"time": "2026-11-15T21:23:09.778Z", "level": "INFO", "logger": "app.access", "message": "GET /api/v1/stations/juan-carlos-i/measurements?start=2025-03-30T00:00:00&end=2025-03-30T06:00:00&aggregation=hourly 200 87.9 ms", "request_id": "docs-example-1", "http": {"method": "GET", "path": "/api/v1/stations/juan-carlos-i/measurements", "query": "start=2025-03-30T00:00:00&end=2025-03-30T06:00:00&aggregation=hourly", "status": 200, "duration_ms": 87.9}}
+  ```
+
+How it works:
+
+- **Request IDs**: every response, errors included, carries an `X-Request-ID` header; quote it when reporting a
+  problem. A client may send its own `X-Request-ID` to follow a request across services. It is reused only if it
+  is up to 128 characters of letters, digits, `.`, `_` and `-`; anything else is replaced by a new ID, so nobody
+  can inject fake lines into the logs. Lines written outside a request (startup) show `-`.
+- The service logs from the worker thread that runs each endpoint. The ID still reaches those lines because it is
+  kept in a context variable, which the thread receives a copy of; a thread-local variable would not.
+- **One access line per request** (method, path, query, status, duration) replaces Uvicorn's own access log, and
+  Uvicorn's other messages use the same format. Unexpected errors are logged with their traceback.
+- **Timestamps are in UTC** (`Z`), unambiguous even when Madrid changes its clocks.
+- The libraries that call AEMET only log warnings, and the **API key never appears in the logs**: it travels in
+  a header, and a test checks the full debug output of a real-mode request for it.
+
+The design, with the options considered, is in [ADR-0011](docs/adr/0011-logging.md).
+
 ## Design decisions
 
 Each significant decision is recorded as an Architecture Decision Record (ADR) in [`docs/adr/`](docs/adr/), with
@@ -415,6 +450,7 @@ its context, the options considered and its consequences.
 | [0008](docs/adr/0008-cache-storage.md) | SQLite through SQLAlchemy Core for the cache: one file per mode, rebuilt instead of migrated, WAL and `BEGIN IMMEDIATE` writes for safe concurrency |
 | [0009](docs/adr/0009-caching-strategy.md) | Cache-first by UTC month: final months are kept forever, months that can still change expire after a TTL, empty months are cached, concurrent fetches of a month are coalesced, and every response reports how it was served |
 | [0010](docs/adr/0010-resilience.md) | When AEMET fails, expired months are served from their cached copy marked as stale, and a circuit breaker stops calling AEMET for a cool-down so no request waits for retries in vain |
+| [0011](docs/adr/0011-logging.md) | Standard logging with a small JSON formatter, a request ID carried in a context variable and echoed as `X-Request-ID`, one access line per request, UTC timestamps |
 
 ## Development
 
@@ -434,6 +470,8 @@ git-ignored. To start, copy [`backend/.env.example`](backend/.env.example) to `b
 |---|---|---|
 | `DEMO_MODE` | `false` | Serve recorded AEMET responses instead of calling the real API. No API key is needed. |
 | `DEMO_DATA_DIR` | `sample_data/demo` | Folder with the recorded responses used in demo mode, relative to `backend/` |
+| `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING` or `ERROR` |
+| `LOG_FORMAT` | `text` (`json` in Docker Compose) | `text` for a terminal, `json` for one JSON object per line |
 | `CACHE_DB_PATH` | `data/cache.sqlite3`, or `data/cache-demo.sqlite3` in demo mode | SQLite file of the cache, relative to `backend/` |
 | `CACHE_TTL_MINUTES` | `60` | How long a month that can still change is served from the cache before it is fetched again |
 | `CACHE_GRACE_HOURS` | `48` | Hours after a month ends during which AEMET may still add data; a month fetched later is final |
@@ -476,6 +514,6 @@ Run them from the repository root.
 | Part | Scope | Status |
 |---|---|---|
 | Part 1 | API with time zone and DST handling, aggregation, data quality fields, CSV export, demo mode, Docker | Done |
-| Part 2 | SQLite cache of AEMET data, resilience when AEMET fails, structured logging | In progress: cache and resilience done, structured logging to do |
+| Part 2 | SQLite cache of AEMET data, resilience when AEMET fails, structured logging | In progress: features done, scaling notes to do |
 | Part 3 | TypeScript front-end with table and charts | To do |
 | Extras | Wind-energy metrics (cubic mean speed, maximum speed, air density, wind power density), CI polish | To do |

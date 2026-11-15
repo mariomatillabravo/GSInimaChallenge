@@ -15,10 +15,12 @@ from fastapi import FastAPI
 from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api.errors import register_error_handlers
+from app.api.middleware import RequestContextMiddleware
 from app.api.routes import health, measurements, stations
 from app.clients.aemet import AemetAntarcticaClient
 from app.clients.recorded import RecordedWeatherSource
 from app.core.config import Settings
+from app.core.logs import configure_logging
 from app.db.database import open_database
 from app.db.repository import CacheRepository
 from app.domain.sources import WeatherSource
@@ -44,8 +46,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=_lifespan,
     )
     app.state.settings = settings if settings is not None else Settings()
+    configure_logging(app.state.settings.log_level, app.state.settings.log_format)
     # Repetitive JSON compresses very well; tiny responses are not worth the CPU.
     app.add_middleware(GZipMiddleware, minimum_size=1000)
+    # Added last, so it is the outermost: it sees every request and times the whole of it.
+    app.add_middleware(RequestContextMiddleware)
     register_error_handlers(app)
     app.include_router(health.router)
     app.include_router(stations.router)

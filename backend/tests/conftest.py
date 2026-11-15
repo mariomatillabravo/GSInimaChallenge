@@ -1,5 +1,6 @@
 """Shared pytest fixtures."""
 
+import logging
 import threading
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -16,10 +17,20 @@ ConcurrentRunner = Callable[[int, Callable[[int], None]], list[BaseException]]
 @pytest.fixture(autouse=True)
 def _isolated_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Keep every test independent of the developer's shell environment and local files."""
-    for name in ("DEMO_MODE", "AEMET_API_KEY"):
+    for name in ("DEMO_MODE", "AEMET_API_KEY", "LOG_LEVEL", "LOG_FORMAT"):
         monkeypatch.delenv(name, raising=False)
     # Applications built by tests keep their cache in a temporary file, never in backend/data.
     monkeypatch.setenv("CACHE_DB_PATH", str(tmp_path / "cache.sqlite3"))
+
+
+@pytest.fixture(autouse=True)
+def _restore_root_logging() -> Iterator[None]:
+    """Undo the global logging changes made by ``configure_logging`` (called by ``create_app``)."""
+    root = logging.getLogger()
+    handlers, level = list(root.handlers), root.level
+    yield
+    root.handlers[:] = handlers
+    root.setLevel(level)
 
 
 @pytest.fixture

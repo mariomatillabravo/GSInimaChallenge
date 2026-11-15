@@ -9,11 +9,13 @@ from pydantic import (
     PositiveFloat,
     PositiveInt,
     SecretStr,
+    ValidationInfo,
     field_validator,
     model_validator,
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.core.logs import LogFormat, LogLevel
 from app.domain.freshness import FreshnessPolicy
 from app.domain.measurements import Aggregation
 
@@ -26,6 +28,10 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    log_level: LogLevel = "INFO"
+    log_format: LogFormat = "text"
+    """``text`` for reading in a terminal, ``json`` (one object per line) for log platforms."""
 
     demo_mode: bool = False
     """Serve recorded AEMET responses instead of calling the real API (no API key needed)."""
@@ -91,6 +97,14 @@ class Settings(BaseSettings):
             Aggregation.DAILY: self.max_range_days_daily,
             Aggregation.MONTHLY: self.max_range_days_monthly,
         }[aggregation]
+
+    @field_validator("log_level", "log_format", mode="before")
+    @classmethod
+    def _case_insensitive(cls, value: object, info: ValidationInfo) -> object:
+        """Accept ``LOG_LEVEL=info`` or ``LOG_FORMAT=JSON`` as well."""
+        if not isinstance(value, str):
+            return value
+        return value.upper() if info.field_name == "log_level" else value.lower()
 
     @field_validator("aemet_api_key", mode="before")
     @classmethod

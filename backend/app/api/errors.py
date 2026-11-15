@@ -10,6 +10,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.api.middleware import REQUEST_ID_HEADER
 from app.api.schemas import ErrorDetail, ErrorResponse
 from app.core.exceptions import (
     AppError,
@@ -72,4 +73,10 @@ async def _handle_request_validation_error(request: Request, error: Exception) -
 async def _handle_unexpected_error(request: Request, error: Exception) -> JSONResponse:
     # The details stay in the server logs; clients never see stack traces or internals.
     logger.exception("Unexpected error while handling %s %s", request.method, request.url.path)
-    return error_response(500, "internal_error", "An unexpected error occurred.")
+    response = error_response(500, "internal_error", "An unexpected error occurred.")
+    # Unexpected errors are answered outside the request middleware, so the request ID header is
+    # added here: it is what links a user's error report to the traceback in the logs.
+    request_id = getattr(request.state, "request_id", None)
+    if request_id is not None:
+        response.headers[REQUEST_ID_HEADER] = request_id
+    return response
