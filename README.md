@@ -104,6 +104,41 @@ operate seasonally (November to March) in a region that uses UTC−03:00 all yea
 every station day exactly 24 hours long. The full reasoning, including the rejected `America/Punta_Arenas`, is in
 [ADR-0002](docs/adr/0002-time-zone-strategy.md).
 
+## Aggregation
+
+| `aggregation` | Rows | Value of each measurement |
+|---|---|---|
+| `none` | The original ten-minute observations | As published by AEMET |
+| `hourly` | One per clock hour | Mean of the hour |
+| `daily` | One per **station-local day** (00:00 to 24:00 at UTC−03:00) | Mean of the day |
+| `monthly` | One per **station-local month** | Mean of the month |
+
+- Each row is labelled with the start of its bucket, written in Europe/Madrid with its offset. A station day
+  starts at 04:00 (winter) or 05:00 (summer) Madrid time, so daily and monthly rows also carry a readable
+  `period` in station time, such as `"2026-03-29"` or `"2026-03"`.
+- Means ignore missing values. A measurement missing in the whole bucket is `null`.
+- Only observations with at least one of the requested measurements are used, and, without aggregation, only
+  those are returned.
+
+### Data quality fields
+
+Every aggregated row says how much data it is based on, so an incomplete bucket is never mistaken for a complete
+one:
+
+| Field | Meaning |
+|---|---|
+| `samples` | Observations used: those with at least one requested value |
+| `expected_samples` | Ten-minute slots in a complete bucket: 6 per hour, 144 per day, days × 144 per month |
+| `coverage` | `samples / expected_samples` as a percentage |
+
+Every bucket between the start and the end of the range is returned, **including empty ones** (`samples = 0`), so
+gaps stay visible. A bucket cut by the requested range (for example, a day requested from 15:00 station time)
+honestly reports its partial coverage, because its mean is not comparable to that of a full bucket. Station days
+are always 24 hours long, so Madrid's DST never makes a bucket look incomplete.
+
+The reasoning, including the rejected Madrid-day and UTC-day alternatives, is in
+[ADR-0005](docs/adr/0005-aggregation.md).
+
 ## Design decisions
 
 Each significant decision is recorded as an Architecture Decision Record (ADR) in [`docs/adr/`](docs/adr/), with
@@ -115,6 +150,7 @@ its context, the options considered and its consequences.
 | [0002](docs/adr/0002-time-zone-strategy.md) | UTC inside the service, Europe/Madrid as default input and as output zone, fixed `UTC-03:00` for station days, inclusive ranges |
 | [0003](docs/adr/0003-dst-input-policy.md) | Non-existent and ambiguous local times are rejected with HTTP 422 instead of being guessed |
 | [0004](docs/adr/0004-aemet-client.md) | A `WeatherSource` port with an AEMET client and a recorded source sharing one pure parser; monthly windows, retries, data cleaning and upstream error classification |
+| [0005](docs/adr/0005-aggregation.md) | Buckets in station local time labelled in Madrid time, means of non-missing values, and `samples`, `expected_samples` and `coverage` on every aggregated row, empty buckets included |
 
 ## Development
 
