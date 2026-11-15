@@ -6,6 +6,56 @@ Web API that retrieves, caches and aggregates weather data from the Spanish Anta
 (Juan Carlos I and Gabriel de Castilla) published by
 [AEMET OpenData](https://opendata.aemet.es/centrodedescargas/inicio).
 
+## Quickstart
+
+### Run it in one minute, without an API key
+
+The repository includes one month of real AEMET data (March 2025, both stations), so the whole API runs in
+**demo mode** without an AEMET account.
+
+With Docker:
+
+```bash
+git clone https://github.com/mariomatillabravo/GSInimaChallenge.git
+cd GSInimaChallenge
+docker compose up --build
+```
+
+Or with Python 3.12 and [uv](https://docs.astral.sh/uv/) (see [Commands](#commands) for the commands without Make):
+
+```bash
+make install
+make demo
+```
+
+Then open the interactive documentation at <http://localhost:8000/docs>, or look at the Madrid spring DST change
+of 2025 hour by hour:
+
+```bash
+curl "http://localhost:8000/api/v1/stations/juan-carlos-i/measurements?start=2025-03-30T00:00:00&end=2025-03-30T06:00:00&aggregation=hourly&types=temperature"
+```
+
+| `datetime` | `temperature_c` | `samples` |
+|---|---|---|
+| `2025-03-30T00:00:00+01:00` | 0.63 | 6 |
+| `2025-03-30T01:00:00+01:00` | 0.68 | 6 |
+| `2025-03-30T03:00:00+02:00` | 0.48 | 6 |
+| `2025-03-30T04:00:00+02:00` | 0.23 | 6 |
+| `2025-03-30T05:00:00+02:00` | 0.55 | 6 |
+| `2025-03-30T06:00:00+02:00` | 0.9 | 1 |
+
+The rows jump from 01:00 to 03:00 because 02:00 does not exist in Madrid that day, and no observation is lost.
+The last row has a single sample because the end of the range (06:00) is inclusive. Outside March 2025 the demo
+returns an empty result with a notice; `GET /api/v1/stations` shows the exact recorded range.
+
+### Use real AEMET data
+
+1. Request a free API key at <https://opendata.aemet.es/centrodedescargas/inicio>, preferably with a personal
+   e-mail address.
+2. Copy `backend/.env.example` to `backend/.env` and set `DEMO_MODE=false` and `AEMET_API_KEY=<your key>`.
+3. Run `make run`, or with Docker `DEMO_MODE=false docker compose up --build`
+   (PowerShell: `$env:DEMO_MODE="false"; docker compose up --build`).
+
 ## API
 
 Interactive documentation is served at `/docs` (Swagger UI) and `/redoc` once the API is running.
@@ -329,3 +379,12 @@ Run them from the repository root.
 | `make check` | The `lint`, `typecheck` and `test` commands above | Everything CI runs |
 | `make up` | `docker compose up --build` | Build and start the Docker stack (demo mode by default) |
 | `make down` | `docker compose down` | Stop the Docker stack |
+
+## Project status
+
+| Part | Scope | Status |
+|---|---|---|
+| Part 1 | API with time zone and DST handling, aggregation, data quality fields, CSV export, demo mode, Docker | Done |
+| Part 2 | SQLite cache of AEMET data, resilience when AEMET fails, structured logging | To do |
+| Part 3 | TypeScript front-end with table and charts | To do |
+| Extras | Wind-energy metrics (cubic mean speed, maximum speed, air density, wind power density), CI polish | To do |
