@@ -433,6 +433,40 @@ How it works:
 
 The design, with the options considered, is in [ADR-0011](docs/adr/0011-logging.md).
 
+## Limits and scaling
+
+The service is built to run as **one Uvicorn process with a local SQLite file**, which is plenty for a team of
+analysts: once the months of a range are cached, a request only reads the local database. Its limits are known:
+
+| Limit | Why it is acceptable today |
+|---|---|
+| SQLite allows **one writer at a time** | Writes are rare (one per fetched month) and short; readers are never blocked thanks to WAL |
+| The cache file is **local to one host** | One process on one host is the intended deployment |
+| Coalescing and the circuit breaker **live in each process** | With N worker processes, the same month can be fetched up to N times and each process detects an AEMET outage by itself; results stay correct ([ADR-0009](docs/adr/0009-caching-strategy.md), [ADR-0010](docs/adr/0010-resilience.md)) |
+| A **long range on an empty cache** is fetched month by month | Ten years of daily data means about 120 sequential fetches the first time; afterwards it is local |
+| About **40 concurrent requests per process** (the thread pool) | Requests served from the cache are short ([ADR-0007](docs/adr/0007-concurrency-model.md)) |
+| **No server-side pagination** | Each aggregation level has a maximum range, which keeps every response bounded |
+
+How it would grow, step by step, each step only when the previous one is not enough:
+
+1. **More worker processes on the same host** (`uvicorn --workers N`): safe today, since SQLite serializes writes
+   and every write replaces a whole month.
+2. **PostgreSQL instead of SQLite**, to share the cache between hosts. SQLAlchemy Core keeps most queries,
+   Alembic replaces `PRAGMA user_version`, and PostgreSQL's advisory locks can coalesce fetches across processes.
+3. **Shared coordination** (for example Redis) for the fetch locks and the circuit breaker state, so that all
+   replicas fetch a month once and agree on whether AEMET is down.
+4. **Background ingestion**: a scheduled job refreshes the current month every TTL and fills past months ahead of
+   time, so no request ever waits for AEMET.
+5. **Parallel fetches** of the months of one request, bounded by AEMET's rate limits, to shorten the first
+   request for a long range.
+
+### Future evolution
+
+Deliberately out of scope for this project, and natural next steps for a production service: authentication and
+authorization, Kubernetes or cloud deployment, splitting into microservices, message queues (for example to
+drive the background ingestion above), real PostgreSQL or Redis deployments, and internationalization of the
+interface.
+
 ## Design decisions
 
 Each significant decision is recorded as an Architecture Decision Record (ADR) in [`docs/adr/`](docs/adr/), with
@@ -514,6 +548,6 @@ Run them from the repository root.
 | Part | Scope | Status |
 |---|---|---|
 | Part 1 | API with time zone and DST handling, aggregation, data quality fields, CSV export, demo mode, Docker | Done |
-| Part 2 | SQLite cache of AEMET data, resilience when AEMET fails, structured logging | In progress: features done, scaling notes to do |
+| Part 2 | SQLite cache of AEMET data, resilience when AEMET fails, structured logging | Done |
 | Part 3 | TypeScript front-end with table and charts | To do |
 | Extras | Wind-energy metrics (cubic mean speed, maximum speed, air density, wind power density), CI polish | To do |

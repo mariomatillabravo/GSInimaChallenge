@@ -57,6 +57,12 @@ Each completed block gets an annotated tag: `v0.1.0` (Part 1), `v0.2.0` (Part 2)
 - **Data quality**: aggregated rows include `samples`, `expected_samples` and `coverage` (computed at query time, not stored).
 - **Output fields**: JSON uses snake_case keys plus a `fields` block with the official labels; CSV export and UI use the official labels.
 - **Caching**: SQLite through SQLAlchemy Core, filled by fixed monthly UTC chunks; schema versioned with `PRAGMA user_version` (no Alembic).
+- **Cache storage**: one default file per mode plus a data-source guard; a version or data-source mismatch rebuilds the cache instead of migrating it; WAL, and every write goes through `write_transaction()` (`BEGIN IMMEDIATE`); a re-fetched month is replaced whole (ADR-0008).
+- **Freshness**: cache-first with a single read path; a month fetched at least `CACHE_GRACE_HOURS` (48) after it ended is final, otherwise it expires after `CACHE_TTL_MINUTES` (60); empty months are cached; the month in progress is fetched up to now and future months are skipped; the fetch time is the start of the request, from an injected clock (ADR-0009).
+- **Concurrent fetches**: single flight per station and month within a process; requests that wait for a shared fetch share its outcome and report the month as fetched (ADR-0009).
+- **Resilience**: when a fetch fails for any upstream error, an expired month with a cached copy is served as stale; a circuit breaker then skips AEMET for `UPSTREAM_COOLDOWN_SECONDS` (60), and months without a copy fail fast with 503 and `Retry-After` (ADR-0010).
+- **Cache metadata**: `source` stays `aemet`/`demo`; `metadata.cache` holds `status` (`hit`/`miss`/`partial`), `last_updated` (oldest fetch among months that can still change) and `stale`, repeated in the `X-Cache-Status` and `X-Data-Stale` headers on JSON and CSV.
+- **Logging**: standard `logging` with text or JSON lines (`LOG_FORMAT`), UTC timestamps; a request ID in a `ContextVar`, echoed as `X-Request-ID` (safe client IDs reused), on every log line and every response, 500s included; one access line per request; the API key is never logged (ADR-0011).
 - **Demo mode**: the whole application runs without an AEMET API key, serving recorded AEMET responses through the same data-source interface as the real client.
 - **Commands**: a Makefile provides shortcuts; the README lists the full equivalent command for every target.
 
