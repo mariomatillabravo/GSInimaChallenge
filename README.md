@@ -482,7 +482,8 @@ interface.
 ## Front-end
 
 The web interface in [`frontend/`](frontend/) is a single-page application in React and strict TypeScript, built
-with Vite ([ADR-0012](docs/adr/0012-frontend-stack.md)). It shows the attribution AEMET requires on every page.
+with Vite ([ADR-0012](docs/adr/0012-frontend-stack.md)). It shows the attribution AEMET requires on every page and,
+in demo mode, a banner with the recorded period of each station, so the user knows which dates have data.
 
 The browser only talks to the origin that served the page and calls the API through relative URLs (`/api/...`). In
 development, the Vite dev server forwards them to the API on port 8000. The API therefore needs no CORS
@@ -496,8 +497,27 @@ make front-install   # once
 make front-dev       # terminal 2: open http://localhost:5173
 ```
 
+On Windows, run the front-end commands from PowerShell or Git Bash. In `cmd.exe`, a current directory written with
+a lower-case drive letter (`c:\...`) makes Vitest load itself twice, and every test file fails with "Vitest failed
+to find the current suite"; `cd /d C:\...` avoids it.
+
 Styles are CSS Modules, one per component, sharing the colours and spacing defined as CSS custom properties in
 [`src/styles/global.css`](frontend/src/styles/global.css); the page follows the system's light or dark theme.
+
+### Talking to the API
+
+The TypeScript types of every request and response are generated from the API's OpenAPI document
+([ADR-0013](docs/adr/0013-frontend-api-client.md)). A script exports the document to
+[`frontend/openapi.json`](frontend/openapi.json) without starting a server, and openapi-typescript turns it into
+`frontend/src/api/schema.d.ts`. Both files are committed, so the front-end builds without Python. After changing the
+API contract, run `make api-types` and commit both files: otherwise `make check` and CI fail, the backend job if the
+API no longer matches `openapi.json`, the front-end job if the types no longer match it.
+
+All requests go through a small client ([`src/api/client.ts`](frontend/src/api/client.ts)). An error answer becomes
+an `ApiError` holding what the API said (code, message, offending parameter), the `X-Request-ID` and, for a 503,
+`Retry-After`, so error messages can show the request ID to look for in the logs. TanStack Query caches the answers:
+the options and the stations are fetched once, a network failure is retried once, and an error answer from the API
+is not retried, because the API already retries AEMET and a 4xx does not change by repeating it.
 
 ## Design decisions
 
@@ -518,6 +538,7 @@ its context, the options considered and its consequences.
 | [0010](docs/adr/0010-resilience.md) | When AEMET fails, expired months are served from their cached copy marked as stale, and a circuit breaker stops calling AEMET for a cool-down so no request waits for retries in vain |
 | [0011](docs/adr/0011-logging.md) | Standard logging with a small JSON formatter, a request ID carried in a context variable and echoed as `X-Request-ID`, one access line per request, UTC timestamps |
 | [0012](docs/adr/0012-frontend-stack.md) | React + Vite front-end in strict TypeScript 5.9 (not 7, which the type-aware tooling does not support yet), ESLint + Prettier + Vitest, same-origin calls through a proxy instead of CORS, CSS Modules |
+| [0013](docs/adr/0013-frontend-api-client.md) | Front-end types generated from a committed OpenAPI document with drift checks in CI, a small `fetch` client whose errors keep the request ID, TanStack Query retrying network failures only |
 
 ## Development
 
@@ -574,15 +595,18 @@ Run them from the repository root.
 | `make lint` | `uv run --directory backend ruff check .`<br>`uv run --directory backend ruff format --check .` | Check backend linting and formatting without changing files |
 | `make format` | `uv run --directory backend ruff check --fix --exit-zero .`<br>`uv run --directory backend ruff format .` | Apply safe lint fixes, then format the backend code (remaining lint issues are reported by `make lint`) |
 | `make typecheck` | `uv run --directory backend mypy` | Backend static type checking in strict mode |
+| `make openapi-check` | `uv run --directory backend python -m scripts.export_openapi --check` | Fail if `frontend/openapi.json` no longer matches the API |
+| `make api-types` | `uv run --directory backend python -m scripts.export_openapi`<br>`npm --prefix frontend run generate:api` | Regenerate `frontend/openapi.json` and the front-end API types after changing the API contract |
 | `make front-install` | `npm --prefix frontend ci` | Install front-end dependencies exactly as pinned in `package-lock.json` |
 | `make front-dev` | `npm --prefix frontend run dev` | Start the front-end dev server on <http://localhost:5173>, forwarding `/api` to port 8000 |
 | `make front-test` | `npm --prefix frontend test` | Run the front-end test suite (Vitest) |
 | `make front-lint` | `npm --prefix frontend run lint` | Check front-end linting (ESLint) and formatting (Prettier) without changing files |
 | `make front-format` | `npm --prefix frontend run format` | Apply lint fixes, then format the front-end code |
 | `make front-typecheck` | `npm --prefix frontend run typecheck` | Front-end static type checking (`tsc -b`) |
+| `make front-types-check` | `npm --prefix frontend run check:api` | Fail if the front-end API types no longer match `frontend/openapi.json` |
 | `make front-build` | `npm --prefix frontend run build` | Type-check and build the front-end for production into `frontend/dist` |
-| `make front-check` | The `front-lint`, `front-typecheck`, `front-test` and `front-build` commands above | Every front-end check |
-| `make check` | The `lint`, `typecheck` and `test` commands, then `make front-check` | Everything CI runs, backend and front-end |
+| `make front-check` | The `front-lint`, `front-typecheck`, `front-types-check`, `front-test` and `front-build` commands above | Every front-end check |
+| `make check` | The `lint`, `typecheck`, `openapi-check` and `test` commands, then `make front-check` | Everything CI runs, backend and front-end |
 | `make up` | `docker compose up --build` | Build and start the Docker stack (demo mode by default) |
 | `make down` | `docker compose down` | Stop the Docker stack. The cache volume is kept; `docker compose down -v` deletes it |
 

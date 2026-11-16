@@ -1,0 +1,916 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AEMET Antarctica Weather API",
+    "description": "Retrieves and aggregates weather data from the Spanish Antarctic stations published by AEMET OpenData. Output datetimes are in Europe/Madrid with their UTC offset.",
+    "version": "0.2.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Liveness check",
+        "description": "Confirm that the process is up and able to serve requests.\n\nThis is a liveness check only: it does not verify external dependencies such as the database\nor the AEMET API.",
+        "operationId": "get_health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/meta": {
+      "get": {
+        "tags": [
+          "meta"
+        ],
+        "summary": "Options and limits of this deployment",
+        "description": "Aggregation levels with their maximum range, measurement types with their official labels\nand units, the time zones used, and whether the data is real or recorded (demo mode).\n\nClients read these values here instead of copying them, because the maximum ranges can be\nchanged through the configuration.",
+        "operationId": "get_meta_api_v1_meta_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetaResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stations": {
+      "get": {
+        "tags": [
+          "stations"
+        ],
+        "summary": "List the available stations",
+        "description": "Stations that can be used in ``/api/v1/stations/{station_id}/measurements``.\n\nIn demo mode, each station also reports the span of its recorded data.",
+        "operationId": "list_stations_api_v1_stations_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/StationOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Stations Api V1 Stations Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stations/{station_id}/measurements": {
+      "get": {
+        "tags": [
+          "measurements"
+        ],
+        "summary": "Measurements of a station for a time range",
+        "description": "Return the time series of a station.\n\nOutput datetimes are in Europe/Madrid with their offset. Daily and monthly buckets follow\nthe station's local time (UTC-03:00). Aggregated rows include `samples`,\n`expected_samples` and `coverage`. Non-existent or ambiguous local times (daylight saving\ntime changes) are rejected with 422.",
+        "operationId": "get_measurements_api_v1_stations__station_id__measurements_get",
+        "parameters": [
+          {
+            "name": "station_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Station identifier.",
+              "examples": [
+                "juan-carlos-i"
+              ],
+              "title": "Station Id"
+            },
+            "description": "Station identifier."
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Start of the range, inclusive: `YYYY-MM-DDTHH:MM:SS`, optionally followed by `Z` or an offset such as `+02:00` (written `%2B02:00` in a URL).",
+              "examples": [
+                "2025-03-29T00:00:00"
+              ],
+              "title": "Start"
+            },
+            "description": "Start of the range, inclusive: `YYYY-MM-DDTHH:MM:SS`, optionally followed by `Z` or an offset such as `+02:00` (written `%2B02:00` in a URL)."
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "End of the range, inclusive. Same format as `start`.",
+              "examples": [
+                "2025-03-31T00:00:00"
+              ],
+              "title": "End"
+            },
+            "description": "End of the range, inclusive. Same format as `start`."
+          },
+          {
+            "name": "tz",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Time zone of `start` and `end` when they have no offset: an IANA name (`Europe/Berlin`) or an offset (`+02:00`). Default: `Europe/Madrid`.",
+              "examples": [
+                "Europe/Berlin"
+              ],
+              "title": "Tz"
+            },
+            "description": "Time zone of `start` and `end` when they have no offset: an IANA name (`Europe/Berlin`) or an offset (`+02:00`). Default: `Europe/Madrid`."
+          },
+          {
+            "name": "aggregation",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/Aggregation",
+              "description": "`none` returns the ten-minute observations; otherwise, means.",
+              "default": "none"
+            },
+            "description": "`none` returns the ten-minute observations; otherwise, means."
+          },
+          {
+            "name": "types",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Measurement types to return: `temperature`, `pressure`, `speed`. Comma-separated or repeated. Empty: all of them.",
+              "title": "Types"
+            },
+            "description": "Measurement types to return: `temperature`, `pressure`, `speed`. Comma-separated or repeated. Empty: all of them."
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/OutputFormat",
+              "description": "`json` (default) or `csv`, a download with the official column labels.",
+              "default": "json"
+            },
+            "description": "`json` (default) or `csv`, a download with the official column labels."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "JSON by default; CSV with the official column labels when `format=csv`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeasurementsResponse"
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "headers": {
+              "X-Cache-Status": {
+                "description": "`hit`, `miss` or `partial`, as in `metadata.cache.status`.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-Data-Stale": {
+                "description": "`true` or `false`, as in `metadata.cache.stale`.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown station.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid parameter (format, DST, range).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "AEMET failed or answered unexpectedly.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "AEMET is unreachable or rate limiting, and a month of the range has no cached copy. Right after a failure AEMET is not called for a while; `Retry-After` then says when to try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "AEMET did not answer in time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Aggregation": {
+        "type": "string",
+        "enum": [
+          "none",
+          "hourly",
+          "daily",
+          "monthly"
+        ],
+        "title": "Aggregation",
+        "description": "Time aggregation requested by the client. ``NONE`` returns the raw 10-minute records."
+      },
+      "AggregationOut": {
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Aggregation",
+            "description": "Value of the `aggregation` parameter."
+          },
+          "max_range_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Range Days",
+            "description": "Longest range accepted at this level, in days of real elapsed time: `end - start` must not exceed `max_range_days` x 24 hours. Null means no limit. A range of N calendar days in local time that crosses a daylight saving time change lasts N days plus or minus one hour, so it can be rejected (autumn) or accepted although the dates suggest it is longer (spring).",
+            "examples": [
+              31
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "max_range_days"
+        ],
+        "title": "AggregationOut"
+      },
+      "CacheInfo": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "hit",
+              "miss",
+              "partial"
+            ],
+            "title": "Status",
+            "description": "`hit`: nothing had to be fetched from the data source; `miss`: every month of the range was fetched for this request; `partial`: a mix. Also sent as `X-Cache-Status`."
+          },
+          "last_updated": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Updated",
+            "description": "When the months of the range that can still change (the current month, or one that ended recently) were fetched, the oldest of them, in Europe/Madrid. Null when all the requested data is final.",
+            "examples": [
+              "2026-11-15T13:00:00+01:00"
+            ]
+          },
+          "stale": {
+            "type": "boolean",
+            "title": "Stale",
+            "description": "True when a month that should have been refreshed is served from an older copy because AEMET failed; `last_updated` then tells how old it is. Also sent as `X-Data-Stale`."
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "last_updated",
+          "stale"
+        ],
+        "title": "CacheInfo"
+      },
+      "ErrorDetail": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code",
+            "examples": [
+              "invalid_parameter"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "parameter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parameter",
+            "examples": [
+              "start"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorDetail"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse"
+      },
+      "FieldInfo": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "description": "Official dataset field name, used in CSV headers."
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label"
+        ],
+        "title": "FieldInfo"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "HealthResponse",
+        "description": "Payload returned by the liveness check."
+      },
+      "MeasurementRow": {
+        "properties": {
+          "station": {
+            "type": "string",
+            "title": "Station",
+            "examples": [
+              "Juan Carlos I"
+            ]
+          },
+          "datetime": {
+            "type": "string",
+            "title": "Datetime",
+            "description": "Observation time or bucket start, in Europe/Madrid with its UTC offset.",
+            "examples": [
+              "2026-03-29T05:00:00+02:00"
+            ]
+          },
+          "period": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period",
+            "description": "Station-local day or month of daily and monthly rows.",
+            "examples": [
+              "2026-03-29"
+            ]
+          },
+          "temperature_c": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature C"
+          },
+          "pressure_hpa": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pressure Hpa"
+          },
+          "speed_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speed Ms"
+          },
+          "samples": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Samples",
+            "description": "Observations used in the bucket."
+          },
+          "expected_samples": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Samples",
+            "description": "Ten-minute slots in a complete bucket."
+          },
+          "coverage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Coverage",
+            "description": "samples / expected_samples, as a percentage."
+          }
+        },
+        "type": "object",
+        "required": [
+          "station",
+          "datetime"
+        ],
+        "title": "MeasurementRow",
+        "description": "One row. Only the requested measurements and, for aggregated rows, the quality fields appear.\n\nA measurement present with ``null`` means \"no data\"; an absent key means \"not requested\"."
+      },
+      "MeasurementType": {
+        "type": "string",
+        "enum": [
+          "temperature",
+          "pressure",
+          "speed"
+        ],
+        "title": "MeasurementType",
+        "description": "Measurements exposed by the API."
+      },
+      "MeasurementTypeOut": {
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/MeasurementType",
+            "description": "Value accepted by the `types` parameter."
+          },
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "Key of the measurement in rows.",
+            "examples": [
+              "temperature_c"
+            ]
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "description": "Official dataset field name, used in CSV headers and in the user interface.",
+            "examples": [
+              "Temperature (°C)"
+            ]
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit",
+            "examples": [
+              "°C"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "key",
+          "label",
+          "unit"
+        ],
+        "title": "MeasurementTypeOut"
+      },
+      "MeasurementsResponse": {
+        "properties": {
+          "metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
+          },
+          "fields": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FieldInfo"
+            },
+            "type": "object",
+            "title": "Fields",
+            "description": "Official label and unit of every key present in the data rows."
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/MeasurementRow"
+            },
+            "type": "array",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "metadata",
+          "fields",
+          "data"
+        ],
+        "title": "MeasurementsResponse"
+      },
+      "MetaResponse": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "aemet",
+              "demo"
+            ],
+            "title": "Source",
+            "description": "Where this deployment reads its data from: AEMET OpenData or recorded data."
+          },
+          "output_timezone": {
+            "type": "string",
+            "title": "Output Timezone",
+            "description": "Time zone of every datetime in responses.",
+            "examples": [
+              "Europe/Madrid"
+            ]
+          },
+          "default_input_timezone": {
+            "type": "string",
+            "title": "Default Input Timezone",
+            "description": "Time zone of `start` and `end` when they have no offset and no `tz` is given.",
+            "examples": [
+              "Europe/Madrid"
+            ]
+          },
+          "aggregations": {
+            "items": {
+              "$ref": "#/components/schemas/AggregationOut"
+            },
+            "type": "array",
+            "title": "Aggregations",
+            "description": "Levels, from finest to coarsest."
+          },
+          "measurement_types": {
+            "items": {
+              "$ref": "#/components/schemas/MeasurementTypeOut"
+            },
+            "type": "array",
+            "title": "Measurement Types"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "output_timezone",
+          "default_input_timezone",
+          "aggregations",
+          "measurement_types"
+        ],
+        "title": "MetaResponse"
+      },
+      "OutputFormat": {
+        "type": "string",
+        "enum": [
+          "json",
+          "csv"
+        ],
+        "title": "OutputFormat"
+      },
+      "ResponseMetadata": {
+        "properties": {
+          "station": {
+            "$ref": "#/components/schemas/StationRef"
+          },
+          "aggregation": {
+            "$ref": "#/components/schemas/Aggregation"
+          },
+          "start": {
+            "type": "string",
+            "title": "Start",
+            "description": "Interpreted start of the range, in Europe/Madrid."
+          },
+          "end": {
+            "type": "string",
+            "title": "End",
+            "description": "Interpreted end of the range (inclusive), in Europe/Madrid."
+          },
+          "input_interpretation": {
+            "type": "string",
+            "title": "Input Interpretation",
+            "description": "How start and end were interpreted.",
+            "examples": [
+              "Europe/Madrid (default)"
+            ]
+          },
+          "output_timezone": {
+            "type": "string",
+            "title": "Output Timezone",
+            "examples": [
+              "Europe/Madrid"
+            ]
+          },
+          "station_timezone": {
+            "type": "string",
+            "title": "Station Timezone",
+            "examples": [
+              "UTC-03:00"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "aemet",
+              "demo"
+            ],
+            "title": "Source",
+            "description": "Where the data came from."
+          },
+          "cache": {
+            "$ref": "#/components/schemas/CacheInfo",
+            "description": "Whether the data was served from the cache."
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count",
+            "description": "Number of rows in data."
+          },
+          "notice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notice",
+            "description": "Explanation when no observation was found for the range (absent otherwise)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "station",
+          "aggregation",
+          "start",
+          "end",
+          "input_interpretation",
+          "output_timezone",
+          "station_timezone",
+          "source",
+          "cache",
+          "count"
+        ],
+        "title": "ResponseMetadata"
+      },
+      "StationOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Identifier used in URLs.",
+            "examples": [
+              "juan-carlos-i"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "examples": [
+              "Juan Carlos I"
+            ]
+          },
+          "aemet_id": {
+            "type": "string",
+            "title": "Aemet Id",
+            "description": "Identifier used by AEMET.",
+            "examples": [
+              "89064"
+            ]
+          },
+          "aemet_name": {
+            "type": "string",
+            "title": "Aemet Name",
+            "description": "Name returned by AEMET.",
+            "examples": [
+              "JCI Estacion meteorologica"
+            ]
+          },
+          "latitude": {
+            "type": "number",
+            "title": "Latitude"
+          },
+          "longitude": {
+            "type": "number",
+            "title": "Longitude"
+          },
+          "altitude_m": {
+            "type": "number",
+            "title": "Altitude M"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "Timezone",
+            "description": "Local time used for daily and monthly buckets.",
+            "examples": [
+              "UTC-03:00"
+            ]
+          },
+          "available_range": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TimeSpanOut"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Demo mode only: first and last recorded observation, in Europe/Madrid. Null when the data source cannot tell (real AEMET data)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "aemet_id",
+          "aemet_name",
+          "latitude",
+          "longitude",
+          "altitude_m",
+          "timezone"
+        ],
+        "title": "StationOut"
+      },
+      "StationRef": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "aemet_id": {
+            "type": "string",
+            "title": "Aemet Id"
+          },
+          "aemet_name": {
+            "type": "string",
+            "title": "Aemet Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "aemet_id",
+          "aemet_name"
+        ],
+        "title": "StationRef"
+      },
+      "TimeSpanOut": {
+        "properties": {
+          "start": {
+            "type": "string",
+            "title": "Start",
+            "examples": [
+              "2025-03-01T01:00:00+01:00"
+            ]
+          },
+          "end": {
+            "type": "string",
+            "title": "End",
+            "examples": [
+              "2025-04-01T01:50:00+02:00"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "TimeSpanOut"
+      }
+    }
+  }
+}

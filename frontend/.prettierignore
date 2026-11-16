@@ -1,4 +1,6 @@
-# Generated files: npm and the build own their format.
+# Generated files: the tools that write them own their format.
 package-lock.json
+openapi.json
+src/api/schema.d.ts
 dist/
 coverage/

@@ -7,7 +7,8 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default defineConfig([
-  globalIgnores(["dist", "coverage"]),
+  // The API types are generated from openapi.json: their style is the generator's.
+  globalIgnores(["dist", "coverage", "src/api/schema.d.ts"]),
   {
     files: ["**/*.{ts,tsx}"],
     extends: [
