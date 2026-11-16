@@ -101,7 +101,7 @@ class TestCleaningRule:
         parsed = parse_observations(json.dumps(records))
 
         assert [o.timestamp for o in parsed.observations] == [utc("2026-01-15T00:10:00")]
-        assert parsed.discarded == 1
+        assert (parsed.discarded, parsed.received) == (1, 2)
 
     def test_record_without_any_value_is_discarded(self) -> None:
         parsed = parse_observations(json.dumps([record(temp="NaN", pres="NaN", vel="NaN")]))

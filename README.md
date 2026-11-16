@@ -237,6 +237,12 @@ Every record goes through the same rule, both for live responses and for recorde
 | No value is left, or the timestamp is invalid | The record is discarded |
 | Records arrive unsorted or repeated | They are sorted by time; a repeated timestamp keeps the last record |
 
+Each fetched month logs how many records were discarded, at `INFO` level and only when there are some, with the
+counts as separate fields in JSON logs (see [Logging](#logging)): a few unusable records are normal data quality,
+not a fault. In the recorded demo data for March 2025, 10 of 4,464 records are discarded for Juan Carlos I and 1
+for Gabriel de Castilla. The parser only counts them, staying a pure function; the AEMET client and the recorded
+source write the log line, since they know the station and the month.
+
 The design is explained in [ADR-0004](docs/adr/0004-aemet-client.md).
 
 ## Time zone handling
@@ -423,14 +429,17 @@ found together. Two formats, chosen with `LOG_FORMAT`:
 - `text` (default, for a terminal):
 
   ```text
-  2026-11-15T21:23:13.449Z INFO docs-example-1 app.services.measurements: Fetched juan-carlos-i 2025-03 from demo: 4454 observations.
-  2026-11-15T21:23:13.459Z INFO docs-example-1 app.access: GET /api/v1/stations/juan-carlos-i/measurements?start=2025-03-30T00:00:00&end=2025-03-30T06:00:00&aggregation=hourly 200 87.8 ms
+  2026-11-16T17:00:02.035Z INFO docs-example-1 app.clients.recorded: Discarded 10 of 4464 records for juan-carlos-i 2025-03: no usable value or no valid timestamp.
+  2026-11-16T17:00:02.070Z INFO docs-example-1 app.services.measurements: Fetched juan-carlos-i 2025-03 from demo: 4454 observations.
+  2026-11-16T17:00:02.080Z INFO docs-example-1 app.access: GET /api/v1/stations/juan-carlos-i/measurements?start=2025-03-30T00:00:00&end=2025-03-30T06:00:00&aggregation=hourly 200 95.4 ms
   ```
 
-- `json` (used by Docker Compose): one JSON object per line, ready for a log platform:
+- `json` (used by Docker Compose): one JSON object per line, ready for a log platform, with the details of
+  each event as separate fields:
 
   ```json
-  {"time": "2026-11-15T21:23:09.778Z", "level": "INFO", "logger": "app.access", "message": "GET /api/v1/stations/juan-carlos-i/measurements?start=2025-03-30T00:00:00&end=2025-03-30T06:00:00&aggregation=hourly 200 87.9 ms", "request_id": "docs-example-1", "http": {"method": "GET", "path": "/api/v1/stations/juan-carlos-i/measurements", "query": "start=2025-03-30T00:00:00&end=2025-03-30T06:00:00&aggregation=hourly", "status": 200, "duration_ms": 87.9}}
+  {"time": "2026-11-16T17:00:08.226Z", "level": "INFO", "logger": "app.clients.recorded", "message": "Discarded 10 of 4464 records for juan-carlos-i 2025-03: no usable value or no valid timestamp.", "request_id": "docs-example-1", "station": "juan-carlos-i", "month": "2025-03", "records": 4464, "discarded": 10}
+  {"time": "2026-11-16T17:00:08.276Z", "level": "INFO", "logger": "app.access", "message": "GET /api/v1/stations/juan-carlos-i/measurements?start=2025-03-30T00:00:00&end=2025-03-30T06:00:00&aggregation=hourly 200 107.0 ms", "request_id": "docs-example-1", "http": {"method": "GET", "path": "/api/v1/stations/juan-carlos-i/measurements", "query": "start=2025-03-30T00:00:00&end=2025-03-30T06:00:00&aggregation=hourly", "status": 200, "duration_ms": 107.0}}
   ```
 
 How it works:

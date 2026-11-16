@@ -1,13 +1,17 @@
 """Weather source that replays recorded AEMET data, so the application runs without an API key."""
 
+import logging
 from datetime import datetime
 from pathlib import Path
 
-from app.clients.aemet_parser import decode_body, parse_observations
+from app.clients.aemet_parser import ParsedObservations, decode_body, parse_observations
+from app.clients.cleaning_log import log_discarded
 from app.domain.chunks import month_chunks
 from app.domain.measurements import Observation
 from app.domain.sources import AvailableRange
 from app.domain.stations import Station
+
+logger = logging.getLogger(__name__)
 
 
 class RecordedWeatherSource:
@@ -30,8 +34,10 @@ class RecordedWeatherSource:
         for chunk in month_chunks(start, end):
             path = self._directory / f"{station.aemet_id}_{chunk.key}.json"
             if path.is_file():  # a month without a file behaves like AEMET's "no data" answer
+                parsed = self._parse(path)
+                log_discarded(logger, parsed, station, month=chunk.key)
                 observations.extend(
-                    obs for obs in self._read(path) if start <= obs.timestamp <= end
+                    obs for obs in parsed.observations if start <= obs.timestamp <= end
                 )
         return observations
 
@@ -49,5 +55,10 @@ class RecordedWeatherSource:
         return self._ranges[station.aemet_id]
 
     @staticmethod
+    def _parse(path: Path) -> ParsedObservations:
+        return parse_observations(decode_body(path.read_bytes(), "utf-8"))
+
+    @staticmethod
     def _read(path: Path) -> list[Observation]:
-        return parse_observations(decode_body(path.read_bytes(), "utf-8")).observations
+        """Observations of a file, without logging (used to compute the recorded range)."""
+        return RecordedWeatherSource._parse(path).observations

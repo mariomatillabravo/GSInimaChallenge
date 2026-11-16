@@ -35,6 +35,8 @@ class ParsedObservations:
     """Sorted by time, at most one per timestamp."""
     discarded: int
     """Records dropped because they had no usable value or no valid timestamp."""
+    received: int
+    """Records in the response, before cleaning."""
 
 
 def decode_body(content: bytes, charset: str | None) -> str:
@@ -72,14 +74,15 @@ def parse_observations(text: str) -> ParsedObservations:
     """
     by_timestamp: dict[datetime, Observation] = {}
     discarded = 0
-    for record in _load_list(text):
+    records = _load_list(text)
+    for record in records:
         observation = _parse_record(record) if isinstance(record, dict) else None
         if observation is None:
             discarded += 1
         else:
             by_timestamp[observation.timestamp] = observation
     observations = [by_timestamp[timestamp] for timestamp in sorted(by_timestamp)]
-    return ParsedObservations(observations=observations, discarded=discarded)
+    return ParsedObservations(observations=observations, discarded=discarded, received=len(records))
 
 
 def load_records(text: str) -> list[dict[str, Any]]:

@@ -48,6 +48,8 @@ real API. Demo mode must work without an API key.
   - a record with `qdato = 1` has all its values treated as missing;
   - a record left without any value, or without a valid UTC timestamp, is discarded;
   - records are sorted by time, and a repeated timestamp keeps the last record.
+- **Discarded records are counted** by the parser and logged by each adapter, once per fetched month, at `INFO`
+  level and only when there are some, with the station, month and counts as log fields.
 - **Retries** with exponential backoff (up to `AEMET_MAX_ATTEMPTS` per window) for network errors, timeouts,
   HTTP 429 or `estado: 429`, and HTTP 5xx. A rejected API key (401/403) and other permanent errors are not
   retried.

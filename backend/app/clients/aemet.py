@@ -1,5 +1,6 @@
 """Client for the AEMET OpenData Antarctica endpoint."""
 
+import logging
 from datetime import UTC, datetime
 from typing import Any, Final
 
@@ -14,6 +15,7 @@ from app.clients.aemet_parser import (
     parse_envelope,
     parse_observations,
 )
+from app.clients.cleaning_log import log_discarded
 from app.core.exceptions import UpstreamError, UpstreamTimeoutError, UpstreamUnavailableError
 from app.domain.chunks import month_chunks
 from app.domain.measurements import Observation
@@ -25,6 +27,8 @@ _URL_DATE_FORMAT: Final = "%Y-%m-%dT%H:%M:%SUTC"
 _ESTADO_OK: Final = 200
 _ESTADO_NO_DATA: Final = 404
 _ESTADO_RATE_LIMITED: Final = 429
+
+logger = logging.getLogger(__name__)
 
 
 class _RateLimitedError(Exception):
@@ -80,9 +84,11 @@ class AemetAntarcticaClient:
         for window_start, window_end in _monthly_windows(start, end):
             text = self._fetch_window(station, window_start, window_end)
             if text is not None:
+                parsed = parse_observations(text)
+                log_discarded(logger, parsed, station, month=window_start.strftime("%Y-%m"))
                 observations.extend(
                     obs
-                    for obs in parse_observations(text).observations
+                    for obs in parsed.observations
                     if window_start <= obs.timestamp <= window_end
                 )
         return observations

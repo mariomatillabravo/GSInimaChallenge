@@ -1,5 +1,7 @@
 """Unit tests for the recorded weather source used in demo mode."""
 
+import json
+import logging
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
@@ -77,3 +79,36 @@ def test_range_across_months_combines_the_available_recordings(
 
     assert observations[0].timestamp == utc("2026-01-15T23:00:00")
     assert observations[-1].timestamp == utc("2026-01-16T00:00:00")
+
+
+def recording_with_one_unusable_record(directory: Path) -> RecordedWeatherSource:
+    records = [
+        {"fhora": "2026-01-15T00:00:00Z", "temp": 1.0, "pres": 980.0, "vel": 5.0},
+        {"fhora": "2026-01-15T00:10:00Z", "temp": "NaN", "pres": "NaN", "vel": "NaN"},
+    ]
+    (directory / "89064_2026-01.json").write_text(json.dumps(records), encoding="utf-8")
+    return RecordedWeatherSource(directory)
+
+
+def test_discarded_records_are_logged_for_the_fetched_month(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    source = recording_with_one_unusable_record(tmp_path)
+    caplog.set_level(logging.INFO, logger="app.clients.recorded")
+
+    fetch(source, "2026-01-15T00:00:00", "2026-01-16T00:00:00")
+
+    [entry] = [r for r in caplog.records if r.name == "app.clients.recorded"]
+    assert entry.getMessage().startswith("Discarded 1 of 2 records for juan-carlos-i 2026-01:")
+    assert (entry.__dict__["month"], entry.__dict__["discarded"]) == ("2026-01", 1)
+
+
+def test_computing_the_recorded_range_logs_nothing(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    source = recording_with_one_unusable_record(tmp_path)
+    caplog.set_level(logging.INFO, logger="app.clients.recorded")
+
+    source.available_range(JUAN_CARLOS_I)
+
+    assert [r for r in caplog.records if r.name == "app.clients.recorded"] == []

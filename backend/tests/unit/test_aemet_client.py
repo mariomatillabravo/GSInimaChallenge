@@ -1,6 +1,7 @@
 """Tests for the AEMET client with a mocked HTTP layer: no request ever reaches the real AEMET."""
 
 import json
+import logging
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
@@ -215,3 +216,54 @@ class TestPermanentErrors:
 
         with pytest.raises(UpstreamError, match="estado 400"):
             client.fetch(STATION, utc("2026-01-15T00:00:00"), utc("2026-01-16T00:00:00"))
+
+
+class TestDiscardedRecords:
+    """The cleaning rule's discards are logged once per month, with their counts as fields."""
+
+    def test_discarded_records_are_logged_with_their_counts(
+        self,
+        router: respx.MockRouter,
+        client: AemetAntarcticaClient,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        records = [
+            {"fhora": "2026-01-15T00:00:00Z", "temp": 1.0, "pres": 980.0, "vel": 5.0},
+            {"fhora": "2026-01-15T00:10:00Z", "temp": "NaN", "pres": "NaN", "vel": "NaN"},
+            {"fhora": "2026-01-15T00:20:00Z", "temp": 1.0, "pres": 980.0, "vel": 5.0, "qdato": 1},
+        ]
+        router.get(DAY_ENVELOPE).mock(return_value=envelope(200))
+        router.get(DATA_URL).respond(200, content=json.dumps(records).encode(), headers=LATIN_TEXT)
+        caplog.set_level(logging.INFO, logger="app.clients.aemet")
+
+        observations = client.fetch(STATION, utc("2026-01-15T00:00:00"), utc("2026-01-16T00:00:00"))
+
+        assert len(observations) == 1
+        [entry] = [r for r in caplog.records if r.name == "app.clients.aemet"]
+        assert entry.levelno == logging.INFO
+        assert entry.getMessage() == (
+            "Discarded 2 of 3 records for juan-carlos-i 2026-01: "
+            "no usable value or no valid timestamp."
+        )
+        assert {
+            key: entry.__dict__[key] for key in ("station", "month", "records", "discarded")
+        } == {
+            "station": "juan-carlos-i",
+            "month": "2026-01",
+            "records": 3,
+            "discarded": 2,
+        }
+
+    def test_nothing_is_logged_when_every_record_is_usable(
+        self,
+        router: respx.MockRouter,
+        client: AemetAntarcticaClient,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        router.get(DAY_ENVELOPE).mock(return_value=envelope(200))
+        router.get(DATA_URL).respond(200, content=DAY_OF_DATA, headers=LATIN_TEXT)
+        caplog.set_level(logging.INFO, logger="app.clients.aemet")
+
+        client.fetch(STATION, utc("2026-01-15T00:00:00"), utc("2026-01-16T00:00:00"))
+
+        assert [r for r in caplog.records if r.name == "app.clients.aemet"] == []
