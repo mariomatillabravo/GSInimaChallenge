@@ -43,6 +43,35 @@ jobs:
       - name: Tests
         run: make test
 
+  frontend:
+    name: Front-end (lint, type-check, tests, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7.0.1
+
+      # The same Node major version as local development, read from frontend/.nvmrc.
+      - name: Install Node.js
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version-file: frontend/.nvmrc
+
+      - name: Install dependencies
+        run: make front-install
+
+      - name: Lint and formatting
+        run: make front-lint
+
+      - name: Type check
+        run: make front-typecheck
+
+      - name: Tests
+        run: make front-test
+
+      - name: Production build
+        run: make front-build
+
   docker:
     name: Docker stack (build and smoke test)
     runs-on: ubuntu-latest
