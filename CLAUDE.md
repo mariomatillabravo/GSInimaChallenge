@@ -64,6 +64,11 @@ Each completed block gets an annotated tag: `v0.1.0` (Part 1), `v0.2.0` (Part 2)
 - **Cache metadata**: `source` stays `aemet`/`demo`; `metadata.cache` holds `status` (`hit`/`miss`/`partial`), `last_updated` (oldest fetch among months that can still change) and `stale`, repeated in the `X-Cache-Status` and `X-Data-Stale` headers on JSON and CSV.
 - **Logging**: standard `logging` with text or JSON lines (`LOG_FORMAT`), UTC timestamps; a request ID in a `ContextVar`, echoed as `X-Request-ID` (safe client IDs reused), on every log line and every response, 500s included; one access line per request; the API key is never logged (ADR-0011).
 - **Demo mode**: the whole application runs without an AEMET API key, serving recorded AEMET responses through the same data-source interface as the real client.
+- **Front-end tooling**: TypeScript 5.9 (7 lacks the JS API that typescript-eslint and openapi-typescript need), ESLint strictTypeChecked + Prettier, Vitest + Testing Library + jsdom, Node 26 pinned in `frontend/.nvmrc` (ADR-0012).
+- **Same origin**: the browser calls relative `/api/...` URLs, proxied by Vite in development and by nginx in Docker (web on :8080, API on :8000); no CORS (ADR-0012).
+- **API types**: generated from the committed `frontend/openapi.json` (`make api-types`); `openapi-check` and `front-types-check` fail on drift. TanStack Query retries network failures once and API errors never; errors keep the request ID (ADR-0013).
+- **Form**: inputs are Madrid wall-clock times, never turned into a browser-zone `Date`; ranges are checked on calendar values with one hour of margin, and the API's 422 settles DST cases (ADR-0014).
+- **Results**: table columns come from the response's `fields`, datetimes show their offset and sort by instant, coverage below 90 % is flagged in words, CSV is the API's own export; charts are Recharts small multiples on a time axis by instant with visible gaps, loaded on demand (ADR-0015).
 - **Commands**: a Makefile provides shortcuts; the README lists the full equivalent command for every target.
 
 ## Out of scope
