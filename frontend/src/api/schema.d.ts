@@ -210,6 +210,36 @@ export interface components {
             /** Speed Ms */
             speed_ms?: number | null;
             /**
+             * Speed Cubic Mean Ms
+             * @description With `metrics=extended`: cube root of the mean of the cubed speeds.
+             */
+            speed_cubic_mean_ms?: number | null;
+            /**
+             * Speed Max Ms
+             * @description With `metrics=extended`: highest ten-minute mean speed (not a gust).
+             */
+            speed_max_ms?: number | null;
+            /**
+             * Temperature Min C
+             * @description With `metrics=extended`: lowest ten-minute mean temperature.
+             */
+            temperature_min_c?: number | null;
+            /**
+             * Temperature Max C
+             * @description With `metrics=extended`: highest ten-minute mean temperature.
+             */
+            temperature_max_c?: number | null;
+            /**
+             * Air Density Kgm3
+             * @description With `metrics=extended`: mean density of dry air, p / (R·T), in kg/m³.
+             */
+            air_density_kgm3?: number | null;
+            /**
+             * Power Density Wm2
+             * @description With `metrics=extended`: mean of ½·rho·v³ over the observations that have speed, temperature and pressure, in W/m².
+             */
+            power_density_wm2?: number | null;
+            /**
              * Samples
              * @description Observations used in the bucket.
              */
@@ -293,7 +323,18 @@ export interface components {
             aggregations: components["schemas"]["AggregationOut"][];
             /** Measurement Types */
             measurement_types: components["schemas"]["MeasurementTypeOut"][];
+            /**
+             * Wind Metrics
+             * @description Returned with `metrics=extended` on hourly, daily and monthly rows.
+             */
+            wind_metrics: components["schemas"]["WindMetricOut"][];
         };
+        /**
+         * MetricSet
+         * @description Values of the ``metrics`` parameter.
+         * @enum {string}
+         */
+        MetricSet: "extended";
         /**
          * OutputFormat
          * @enum {string}
@@ -412,6 +453,37 @@ export interface components {
              */
             end: string;
         };
+        /**
+         * WindMetric
+         * @description Metrics returned with ``metrics=extended``.
+         * @enum {string}
+         */
+        WindMetric: "speed_cubic_mean" | "speed_max" | "temperature_min" | "temperature_max" | "air_density" | "power_density";
+        /** WindMetricOut */
+        WindMetricOut: {
+            id: components["schemas"]["WindMetric"];
+            /**
+             * Key
+             * @description Key of the metric in rows.
+             * @example power_density_wm2
+             */
+            key: string;
+            /**
+             * Label
+             * @example Wind power density (W/m²)
+             */
+            label: string;
+            /**
+             * Unit
+             * @example W/m²
+             */
+            unit: string;
+            /**
+             * Inputs
+             * @description Measurement types the metric needs; it is returned only if all are requested.
+             */
+            inputs: components["schemas"]["MeasurementType"][];
+        };
     };
     responses: never;
     parameters: never;
@@ -494,6 +566,8 @@ export interface operations {
                 aggregation?: components["schemas"]["Aggregation"];
                 /** @description Measurement types to return: `temperature`, `pressure`, `speed`. Comma-separated or repeated. Empty: all of them. */
                 types?: string[] | null;
+                /** @description `extended` adds wind-energy metrics to aggregated rows: cubic mean and maximum speed, temperature extremes, air density and wind power density. Each one appears when the measurement types it needs are requested. */
+                metrics?: components["schemas"]["MetricSet"] | null;
                 /** @description `json` (default) or `csv`, a download with the official column labels. */
                 format?: components["schemas"]["OutputFormat"];
             };

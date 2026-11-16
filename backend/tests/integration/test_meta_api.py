@@ -54,6 +54,50 @@ def test_demo_deployment_describes_its_options(client: TestClient) -> None:
             {"id": "pressure", "key": "pressure_hpa", "label": "Pressure (hPa)", "unit": "hPa"},
             {"id": "speed", "key": "speed_ms", "label": "Speed (m/s)", "unit": "m/s"},
         ],
+        "wind_metrics": [
+            {
+                "id": "speed_cubic_mean",
+                "key": "speed_cubic_mean_ms",
+                "label": "Cubic mean speed (m/s)",
+                "unit": "m/s",
+                "inputs": ["speed"],
+            },
+            {
+                "id": "speed_max",
+                "key": "speed_max_ms",
+                "label": "Maximum 10-minute speed (m/s)",
+                "unit": "m/s",
+                "inputs": ["speed"],
+            },
+            {
+                "id": "temperature_min",
+                "key": "temperature_min_c",
+                "label": "Minimum 10-minute temperature (°C)",
+                "unit": "°C",
+                "inputs": ["temperature"],
+            },
+            {
+                "id": "temperature_max",
+                "key": "temperature_max_c",
+                "label": "Maximum 10-minute temperature (°C)",
+                "unit": "°C",
+                "inputs": ["temperature"],
+            },
+            {
+                "id": "air_density",
+                "key": "air_density_kgm3",
+                "label": "Air density (kg/m³)",
+                "unit": "kg/m³",
+                "inputs": ["temperature", "pressure"],
+            },
+            {
+                "id": "power_density",
+                "key": "power_density_wm2",
+                "label": "Wind power density (W/m²)",
+                "unit": "W/m²",
+                "inputs": ["temperature", "pressure", "speed"],
+            },
+        ],
     }
 
 

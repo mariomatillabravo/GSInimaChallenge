@@ -16,6 +16,7 @@ from app.domain.measurements import Aggregation, MeasurementType
 from app.domain.sources import AvailableRange, KnowsAvailableRange, WeatherSource
 from app.domain.stations import Station
 from app.domain.time_range import TimeRange
+from app.domain.wind import WindMetric
 from app.services.circuit import DEFAULT_COOLDOWN, CircuitBreaker
 from app.services.coalescing import SingleFlight
 
@@ -35,6 +36,8 @@ class MeasurementQuery:
     time_range: TimeRange
     aggregation: Aggregation
     types: tuple[MeasurementType, ...]
+    metrics: tuple[WindMetric, ...] = ()
+    """Wind-energy metrics to add to each bucket (aggregated levels only)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +107,7 @@ class MeasurementService:
             station_timezone=station.local_timezone,
             start=time_range.start,
             end=time_range.end,
+            metrics=query.metrics,
         )
         return MeasurementResult(
             query=query,

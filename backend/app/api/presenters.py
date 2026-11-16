@@ -17,6 +17,7 @@ from app.api.schemas import (
     StationOut,
     StationRef,
     TimeSpanOut,
+    WindMetricOut,
 )
 from app.core.config import Settings
 from app.domain.aggregation import SeriesRow
@@ -39,6 +40,7 @@ from app.domain.timezones import (
     describe_timezone,
     format_output_datetime,
 )
+from app.domain.wind import METRIC_FIELDS, WindMetric
 from app.services.measurements import MeasurementResult, SourceLabel
 
 VALUE_DECIMALS = 2
@@ -81,6 +83,16 @@ def present_meta(settings: Settings, source: SourceLabel) -> MetaResponse:
             )
             for kind in MeasurementType
         ],
+        wind_metrics=[
+            WindMetricOut(
+                id=metric,
+                key=METRIC_FIELDS[metric].key,
+                label=METRIC_FIELDS[metric].label,
+                unit=METRIC_FIELDS[metric].unit,
+                inputs=[kind for kind in MeasurementType if kind in METRIC_FIELDS[metric].inputs],
+            )
+            for metric in WindMetric
+        ],
     )
 
 
@@ -118,9 +130,16 @@ def present_measurements(result: MeasurementResult) -> MeasurementsResponse:
             ),
             count=len(result.rows),
         ),
-        fields=_fields(query.types, aggregated=aggregated, with_period=with_period),
+        fields=_fields(query.types, query.metrics, aggregated=aggregated, with_period=with_period),
         data=[
-            _row(row, station, query.types, aggregated=aggregated, with_period=with_period)
+            _row(
+                row,
+                station,
+                query.types,
+                query.metrics,
+                aggregated=aggregated,
+                with_period=with_period,
+            )
             for row in result.rows
         ],
     )
@@ -182,6 +201,7 @@ def _row(
     row: SeriesRow,
     station: Station,
     types: tuple[MeasurementType, ...],
+    metrics: tuple[WindMetric, ...],
     *,
     aggregated: bool,
     with_period: bool,
@@ -196,6 +216,10 @@ def _row(
         values["period"] = row.period
     for kind in types:
         values[MEASUREMENT_FIELDS[kind].key] = _round(row.values[kind])
+    for metric in metrics:
+        spec = METRIC_FIELDS[metric]
+        value = row.metrics.get(metric)
+        values[spec.key] = None if value is None else round(value, spec.decimals)
     if aggregated:
         values |= {
             "samples": row.samples,
@@ -206,7 +230,11 @@ def _row(
 
 
 def _fields(
-    types: tuple[MeasurementType, ...], *, aggregated: bool, with_period: bool
+    types: tuple[MeasurementType, ...],
+    metrics: tuple[WindMetric, ...],
+    *,
+    aggregated: bool,
+    with_period: bool,
 ) -> dict[str, FieldInfo]:
     # ``unit`` is always set explicitly (null when there is none) so every entry has the same shape.
     fields = {
@@ -218,6 +246,9 @@ def _fields(
     for kind in types:
         spec = MEASUREMENT_FIELDS[kind]
         fields[spec.key] = FieldInfo(label=spec.label, unit=spec.unit)
+    for metric in metrics:
+        metric_spec = METRIC_FIELDS[metric]
+        fields[metric_spec.key] = FieldInfo(label=metric_spec.label, unit=metric_spec.unit)
     if aggregated:
         fields["samples"] = FieldInfo(label=SAMPLES_LABEL, unit=None)
         fields["expected_samples"] = FieldInfo(label=EXPECTED_SAMPLES_LABEL, unit=None)

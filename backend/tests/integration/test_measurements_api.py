@@ -285,6 +285,108 @@ class TestAggregatedSeries:
         assert body["data"][0]["temperature_c"] == 1.67
 
 
+class TestWindMetrics:
+    """``metrics=extended`` (constant 1 °C, 980 hPa and 5 m/s from ``grid``)."""
+
+    def test_extended_metrics_are_added_to_aggregated_rows(
+        self, api: TestClient, source: FakeWeatherSource
+    ) -> None:
+        source.observations = grid("2026-01-15T03:00:00", 144)
+
+        body = get_ok(
+            api,
+            start="2026-01-15T03:00:00Z",
+            end="2026-01-16T02:50:00Z",
+            aggregation="daily",
+            metrics="extended",
+        )
+
+        [row] = body["data"]
+        # rho = 98,000 Pa / (287.05 x 274.15 K) = 1.2453 kg/m³; ½ x rho x 5³ = 77.83 W/m².
+        assert {key: row[key] for key in list(row)[6:12]} == {
+            "speed_cubic_mean_ms": 5.0,
+            "speed_max_ms": 5.0,
+            "temperature_min_c": 1.0,
+            "temperature_max_c": 1.0,
+            "air_density_kgm3": 1.245,
+            "power_density_wm2": 77.8,
+        }
+        assert list(body["fields"])[6:12] == [
+            "speed_cubic_mean_ms",
+            "speed_max_ms",
+            "temperature_min_c",
+            "temperature_max_c",
+            "air_density_kgm3",
+            "power_density_wm2",
+        ]
+        assert body["fields"]["power_density_wm2"] == {
+            "label": "Wind power density (W/m²)",
+            "unit": "W/m²",
+        }
+        assert row["samples"] == 144
+
+    def test_only_metrics_whose_inputs_are_requested_appear(
+        self, api: TestClient, source: FakeWeatherSource
+    ) -> None:
+        source.observations = grid("2026-01-15T03:00:00", 6)
+
+        body = get_ok(
+            api,
+            start="2026-01-15T03:00:00Z",
+            end="2026-01-15T03:50:00Z",
+            aggregation="hourly",
+            types="speed",
+            metrics="extended",
+        )
+
+        assert list(body["data"][0]) == [
+            "station",
+            "datetime",
+            "speed_ms",
+            "speed_cubic_mean_ms",
+            "speed_max_ms",
+            "samples",
+            "expected_samples",
+            "coverage",
+        ]
+
+    def test_without_the_parameter_the_rows_are_unchanged(
+        self, api: TestClient, source: FakeWeatherSource
+    ) -> None:
+        source.observations = grid("2026-01-15T03:00:00", 6)
+
+        body = get_ok(
+            api, start="2026-01-15T03:00:00Z", end="2026-01-15T03:50:00Z", aggregation="hourly"
+        )
+
+        assert "power_density_wm2" not in body["data"][0]
+        assert "power_density_wm2" not in body["fields"]
+
+    def test_csv_carries_the_metric_labels(
+        self, api: TestClient, source: FakeWeatherSource
+    ) -> None:
+        source.observations = grid("2026-01-15T03:00:00", 6)
+
+        response = api.get(
+            URL,
+            params={
+                "start": "2026-01-15T03:00:00Z",
+                "end": "2026-01-15T03:50:00Z",
+                "aggregation": "hourly",
+                "metrics": "extended",
+                "format": "csv",
+            },
+        )
+
+        header = response.content.decode("utf-8-sig").splitlines()[0]
+        assert header == (
+            "Station,Datetime,Temperature (°C),Pressure (hPa),Speed (m/s),"
+            "Cubic mean speed (m/s),Maximum 10-minute speed (m/s),"
+            "Minimum 10-minute temperature (°C),Maximum 10-minute temperature (°C),"
+            "Air density (kg/m³),Wind power density (W/m²),Samples,Expected samples,Coverage (%)"
+        )
+
+
 class TestErrors:
     def test_unknown_station(self, api: TestClient) -> None:
         response = api.get(
@@ -334,6 +436,25 @@ class TestErrors:
                 {"start": "2026-01-15T00:00:00", "end": "2026-01-16T00:00:00", "tz": "Mars/Base"},
                 "tz",
                 "neither an IANA",
+            ),
+            (
+                {
+                    "start": "2026-01-15T00:00:00",
+                    "end": "2026-01-16T00:00:00",
+                    "metrics": "extended",
+                },
+                "metrics",
+                "choose an aggregation level",
+            ),
+            (
+                {
+                    "start": "2026-01-15T00:00:00",
+                    "end": "2026-01-16T00:00:00",
+                    "aggregation": "daily",
+                    "metrics": "basic",
+                },
+                "metrics",
+                "Input should be",
             ),
         ],
     )

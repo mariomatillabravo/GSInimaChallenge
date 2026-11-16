@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from app.domain.measurements import Aggregation, MeasurementType
+from app.domain.wind import WindMetric
 
 
 class OutputFormat(StrEnum):
@@ -71,6 +72,31 @@ class MeasurementRow(BaseModel):
     temperature_c: float | None = None
     pressure_hpa: float | None = None
     speed_ms: float | None = None
+    speed_cubic_mean_ms: float | None = Field(
+        default=None,
+        description="With `metrics=extended`: cube root of the mean of the cubed speeds.",
+    )
+    speed_max_ms: float | None = Field(
+        default=None,
+        description="With `metrics=extended`: highest ten-minute mean speed (not a gust).",
+    )
+    temperature_min_c: float | None = Field(
+        default=None, description="With `metrics=extended`: lowest ten-minute mean temperature."
+    )
+    temperature_max_c: float | None = Field(
+        default=None, description="With `metrics=extended`: highest ten-minute mean temperature."
+    )
+    air_density_kgm3: float | None = Field(
+        default=None,
+        description="With `metrics=extended`: mean density of dry air, p / (R·T), in kg/m³.",
+    )
+    power_density_wm2: float | None = Field(
+        default=None,
+        description=(
+            "With `metrics=extended`: mean of ½·rho·v³ over the observations that have speed, "
+            "temperature and pressure, in W/m²."
+        ),
+    )
     samples: int | None = Field(default=None, description="Observations used in the bucket.")
     expected_samples: int | None = Field(
         default=None, description="Ten-minute slots in a complete bucket."
@@ -155,6 +181,16 @@ class MeasurementTypeOut(BaseModel):
     unit: str = Field(examples=["°C"])
 
 
+class WindMetricOut(BaseModel):
+    id: WindMetric
+    key: str = Field(description="Key of the metric in rows.", examples=["power_density_wm2"])
+    label: str = Field(examples=["Wind power density (W/m²)"])
+    unit: str = Field(examples=["W/m²"])
+    inputs: list[MeasurementType] = Field(
+        description="Measurement types the metric needs; it is returned only if all are requested."
+    )
+
+
 class MetaResponse(BaseModel):
     source: Literal["aemet", "demo"] = Field(
         description="Where this deployment reads its data from: AEMET OpenData or recorded data."
@@ -168,6 +204,9 @@ class MetaResponse(BaseModel):
     )
     aggregations: list[AggregationOut] = Field(description="Levels, from finest to coarsest.")
     measurement_types: list[MeasurementTypeOut]
+    wind_metrics: list[WindMetricOut] = Field(
+        description="Returned with `metrics=extended` on hourly, daily and monthly rows."
+    )
 
 
 class ErrorDetail(BaseModel):

@@ -10,6 +10,7 @@ from app.api.schemas import ErrorResponse, MeasurementsResponse, OutputFormat
 from app.domain.measurements import Aggregation, parse_measurement_types
 from app.domain.stations import get_station
 from app.domain.time_range import resolve_range, validate_range_length
+from app.domain.wind import MetricSet, select_metrics
 from app.services.measurements import MeasurementQuery
 
 router = APIRouter(prefix="/api/v1", tags=["measurements"])
@@ -101,6 +102,16 @@ def get_measurements(
             ),
         ),
     ] = None,
+    metrics: Annotated[
+        MetricSet | None,
+        Query(
+            description=(
+                "`extended` adds wind-energy metrics to aggregated rows: cubic mean and maximum "
+                "speed, temperature extremes, air density and wind power density. Each one appears "
+                "when the measurement types it needs are requested."
+            ),
+        ),
+    ] = None,
     output_format: Annotated[
         OutputFormat,
         Query(
@@ -119,11 +130,13 @@ def get_measurements(
     station = get_station(station_id)
     time_range = resolve_range(start, end, tz)
     validate_range_length(time_range, aggregation, settings.max_range_days(aggregation))
+    measurement_types = parse_measurement_types(types)
     query = MeasurementQuery(
         station=station,
         time_range=time_range,
         aggregation=aggregation,
-        types=parse_measurement_types(types),
+        types=measurement_types,
+        metrics=select_metrics(metrics, aggregation, measurement_types),
     )
     body = present_measurements(service.get(query))
     cache_header = {

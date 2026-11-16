@@ -86,6 +86,7 @@ from 18.5 KB to 1.5 KB.
 | `tz` | no | Zone of `start`/`end` without offset: IANA name (`Europe/Berlin`) or offset. Default `Europe/Madrid` |
 | `aggregation` | no | `none` (default), `hourly`, `daily` or `monthly` |
 | `types` | no | `temperature`, `pressure`, `speed`, comma-separated or repeated. Default: all |
+| `metrics` | no | `extended` adds [wind-energy metrics](#wind-energy-metrics) to hourly, daily and monthly rows |
 | `format` | no | `json` (default) or `csv` |
 
 **Maximum range.** Each aggregation level accepts a maximum range (`MAX_RANGE_DAYS_*` in
@@ -175,6 +176,47 @@ Juan Carlos I,2026-01-15T04:00:00+01:00,2026-01-15,2.93,2.09,127,144,88.2
 The CSV is built from the JSON response itself, so both formats always contain the same columns and values.
 Missing values are empty cells. The file is UTF-8 with a byte order mark, so that Excel on Windows shows the
 degree sign correctly.
+
+### Wind-energy metrics
+
+`metrics=extended` adds statistics for wind-energy analysis to each aggregated row, with their labels and units in
+`fields`, so they also appear in the CSV export ([ADR-0016](docs/adr/0016-wind-energy-metrics.md)):
+
+| Key | Label | Computation over the bucket | Needs |
+|---|---|---|---|
+| `speed_cubic_mean_ms` | Cubic mean speed (m/s) | ∛(mean of v³) | speed |
+| `speed_max_ms` | Maximum 10-minute speed (m/s) | highest ten-minute mean speed | speed |
+| `temperature_min_c`, `temperature_max_c` | Minimum / Maximum 10-minute temperature (°C) | lowest / highest ten-minute mean | temperature |
+| `air_density_kgm3` | Air density (kg/m³) | mean of ρ = p / (R·T) per observation, dry air | temperature, pressure |
+| `power_density_wm2` | Wind power density (W/m²) | mean of ½·ρ·v³ per observation | all three |
+
+Each metric appears when the types it needs are requested; with raw ten-minute records the parameter is rejected
+with a 422, since a bucket statistic of one value would repeat it. The default response does not change.
+
+Why these and not the mean speed: the power of the wind grows with the cube of its speed, so a few windy hours
+carry more energy than many calm ones. The recorded month of March 2025 at Juan Carlos I shows it (the range
+starts at 04:00 in Madrid, midnight at the station, so it falls entirely in the station's month of March):
+
+```bash
+curl "http://localhost:8000/api/v1/stations/juan-carlos-i/measurements?start=2025-03-01T04:00:00&end=2025-03-31T23:59:00&aggregation=monthly&metrics=extended"
+```
+
+| `period` | `speed_ms` | `speed_cubic_mean_ms` | `speed_max_ms` | `air_density_kgm3` | `power_density_wm2` | `coverage` |
+|---|---|---|---|---|---|---|
+| `2025-03` | 3.1 | 4.28 | 13.4 | 1.25 | 48.8 | 99.1 |
+
+The cubic mean is 38 % above the mean speed, and the power density, averaged observation by observation, is 2.6
+times what ½·ρ·v³ of the mean speed would give (18.6 W/m²).
+
+Limitations, all documented in the ADR:
+
+- **Maximum speed is the highest ten-minute mean, not a gust.** AEMET also publishes the maximum within each ten
+  minutes (`velx`) and temperature extremes (`tmn`, `tmx`); storing them would give real gusts and extremes.
+- **Sensor height**: the stations measure at about 10 m, while turbine hubs stand at 80 to 120 m, where the wind is
+  stronger. The metrics describe the site at sensor height; extrapolating needs a wind shear model and its
+  parameters.
+- **Dry air**: humidity changes the density by less than 0.24 % even in saturated air at 0 °C.
+- **Power density is the power of the wind**, not of a turbine: energy produced also depends on its power curve.
 
 ### Errors
 
@@ -634,6 +676,7 @@ its context, the options considered and its consequences.
 | [0013](docs/adr/0013-frontend-api-client.md) | Front-end types generated from a committed OpenAPI document with drift checks in CI, a small `fetch` client whose errors keep the request ID, TanStack Query retrying network failures only |
 | [0014](docs/adr/0014-query-form-validation.md) | The query form checks ranges on calendar values with one hour of margin and leaves daylight saving time cases to the API, validates on submit, shows API parameter errors next to their field, and starts on a query with data |
 | [0015](docs/adr/0015-charts.md) | Recharts small multiples on a shared time axis by instant, ticks on Madrid's calendar, visible gaps in ten-minute data, and a suggested coarser aggregation above 1,000 points |
+| [0016](docs/adr/0016-wind-energy-metrics.md) | Optional wind-energy metrics per bucket (cubic mean and maximum speed, temperature extremes, air density, wind power density), computed per observation before averaging, from the stored ten-minute means |
 
 ## Development
 
@@ -712,4 +755,4 @@ Run them from the repository root.
 | Part 1 | API with time zone and DST handling, aggregation, data quality fields, CSV export, demo mode, Docker | Done |
 | Part 2 | SQLite cache of AEMET data, resilience when AEMET fails, structured logging | Done |
 | Part 3 | TypeScript front-end with table and charts | Done |
-| Extras | Wind-energy metrics (cubic mean speed, maximum speed, air density, wind power density), CI polish | To do |
+| Extras | Wind-energy metrics (cubic mean speed, maximum speed, air density, wind power density), CI polish | In progress |

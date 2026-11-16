@@ -19,6 +19,50 @@ export const demoMeta: MetaResponse = {
     { id: "pressure", key: "pressure_hpa", label: "Pressure (hPa)", unit: "hPa" },
     { id: "speed", key: "speed_ms", label: "Speed (m/s)", unit: "m/s" },
   ],
+  wind_metrics: [
+    {
+      id: "speed_cubic_mean",
+      key: "speed_cubic_mean_ms",
+      label: "Cubic mean speed (m/s)",
+      unit: "m/s",
+      inputs: ["speed"],
+    },
+    {
+      id: "speed_max",
+      key: "speed_max_ms",
+      label: "Maximum 10-minute speed (m/s)",
+      unit: "m/s",
+      inputs: ["speed"],
+    },
+    {
+      id: "temperature_min",
+      key: "temperature_min_c",
+      label: "Minimum 10-minute temperature (°C)",
+      unit: "°C",
+      inputs: ["temperature"],
+    },
+    {
+      id: "temperature_max",
+      key: "temperature_max_c",
+      label: "Maximum 10-minute temperature (°C)",
+      unit: "°C",
+      inputs: ["temperature"],
+    },
+    {
+      id: "air_density",
+      key: "air_density_kgm3",
+      label: "Air density (kg/m³)",
+      unit: "kg/m³",
+      inputs: ["temperature", "pressure"],
+    },
+    {
+      id: "power_density",
+      key: "power_density_wm2",
+      label: "Wind power density (W/m²)",
+      unit: "W/m²",
+      inputs: ["temperature", "pressure", "speed"],
+    },
+  ],
 };
 
 export const realMeta: MetaResponse = { ...demoMeta, source: "aemet" };
@@ -156,6 +200,146 @@ export const emptyMeasurements: MeasurementsResponse = {
       samples: 0,
       expected_samples: 144,
       coverage: 0.0,
+    },
+  ],
+};
+
+/** The same daily means with metrics=extended (wind-energy metrics), copied from the API. */
+export const dailyWindMeasurements: MeasurementsResponse = {
+  metadata: {
+    station: {
+      id: "juan-carlos-i",
+      name: "Juan Carlos I",
+      aemet_id: "89064",
+      aemet_name: "JCI Estacion meteorologica",
+    },
+    aggregation: "daily",
+    start: "2025-03-30T00:00:00+01:00",
+    end: "2025-04-01T00:00:00+02:00",
+    input_interpretation: "Europe/Madrid (default)",
+    output_timezone: "Europe/Madrid",
+    station_timezone: "UTC-03:00",
+    source: "demo",
+    cache: {
+      status: "hit",
+      last_updated: null,
+      stale: false,
+    },
+    count: 3,
+  },
+  fields: {
+    station: {
+      label: "Station",
+      unit: null,
+    },
+    datetime: {
+      label: "Datetime",
+      unit: null,
+    },
+    period: {
+      label: "Period",
+      unit: null,
+    },
+    temperature_c: {
+      label: "Temperature (°C)",
+      unit: "°C",
+    },
+    pressure_hpa: {
+      label: "Pressure (hPa)",
+      unit: "hPa",
+    },
+    speed_ms: {
+      label: "Speed (m/s)",
+      unit: "m/s",
+    },
+    speed_cubic_mean_ms: {
+      label: "Cubic mean speed (m/s)",
+      unit: "m/s",
+    },
+    speed_max_ms: {
+      label: "Maximum 10-minute speed (m/s)",
+      unit: "m/s",
+    },
+    temperature_min_c: {
+      label: "Minimum 10-minute temperature (°C)",
+      unit: "°C",
+    },
+    temperature_max_c: {
+      label: "Maximum 10-minute temperature (°C)",
+      unit: "°C",
+    },
+    air_density_kgm3: {
+      label: "Air density (kg/m³)",
+      unit: "kg/m³",
+    },
+    power_density_wm2: {
+      label: "Wind power density (W/m²)",
+      unit: "W/m²",
+    },
+    samples: {
+      label: "Samples",
+      unit: null,
+    },
+    expected_samples: {
+      label: "Expected samples",
+      unit: null,
+    },
+    coverage: {
+      label: "Coverage (%)",
+      unit: "%",
+    },
+  },
+  data: [
+    {
+      station: "Juan Carlos I",
+      datetime: "2025-03-29T04:00:00+01:00",
+      period: "2025-03-29",
+      temperature_c: 0.51,
+      pressure_hpa: 981.86,
+      speed_ms: 2.81,
+      speed_cubic_mean_ms: 3.0,
+      speed_max_ms: 4.3,
+      temperature_min_c: 0.1,
+      temperature_max_c: 0.8,
+      air_density_kgm3: 1.25,
+      power_density_wm2: 16.9,
+      samples: 24,
+      expected_samples: 144,
+      coverage: 16.7,
+    },
+    {
+      station: "Juan Carlos I",
+      datetime: "2025-03-30T05:00:00+02:00",
+      period: "2025-03-30",
+      temperature_c: 0.64,
+      pressure_hpa: 980.74,
+      speed_ms: 2.3,
+      speed_cubic_mean_ms: 2.82,
+      speed_max_ms: 5.9,
+      temperature_min_c: 0.1,
+      temperature_max_c: 1.3,
+      air_density_kgm3: 1.248,
+      power_density_wm2: 14.0,
+      samples: 144,
+      expected_samples: 144,
+      coverage: 100.0,
+    },
+    {
+      station: "Juan Carlos I",
+      datetime: "2025-03-31T05:00:00+02:00",
+      period: "2025-03-31",
+      temperature_c: -0.17,
+      pressure_hpa: 987.77,
+      speed_ms: 1.9,
+      speed_cubic_mean_ms: 2.36,
+      speed_max_ms: 4.1,
+      temperature_min_c: -0.7,
+      temperature_max_c: 0.5,
+      air_density_kgm3: 1.261,
+      power_density_wm2: 8.3,
+      samples: 115,
+      expected_samples: 144,
+      coverage: 79.9,
     },
   ],
 };

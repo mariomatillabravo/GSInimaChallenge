@@ -181,6 +181,24 @@
             "description": "Measurement types to return: `temperature`, `pressure`, `speed`. Comma-separated or repeated. Empty: all of them."
           },
           {
+            "name": "metrics",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/MetricSet"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "`extended` adds wind-energy metrics to aggregated rows: cubic mean and maximum speed, temperature extremes, air density and wind power density. Each one appears when the measurement types it needs are requested.",
+              "title": "Metrics"
+            },
+            "description": "`extended` adds wind-energy metrics to aggregated rows: cubic mean and maximum speed, temperature extremes, air density and wind power density. Each one appears when the measurement types it needs are requested."
+          },
+          {
             "name": "format",
             "in": "query",
             "required": false,
@@ -511,6 +529,78 @@
             ],
             "title": "Speed Ms"
           },
+          "speed_cubic_mean_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speed Cubic Mean Ms",
+            "description": "With `metrics=extended`: cube root of the mean of the cubed speeds."
+          },
+          "speed_max_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speed Max Ms",
+            "description": "With `metrics=extended`: highest ten-minute mean speed (not a gust)."
+          },
+          "temperature_min_c": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature Min C",
+            "description": "With `metrics=extended`: lowest ten-minute mean temperature."
+          },
+          "temperature_max_c": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temperature Max C",
+            "description": "With `metrics=extended`: highest ten-minute mean temperature."
+          },
+          "air_density_kgm3": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Air Density Kgm3",
+            "description": "With `metrics=extended`: mean density of dry air, p / (R·T), in kg/m³."
+          },
+          "power_density_wm2": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Power Density Wm2",
+            "description": "With `metrics=extended`: mean of ½·rho·v³ over the observations that have speed, temperature and pressure, in W/m²."
+          },
           "samples": {
             "anyOf": [
               {
@@ -675,6 +765,14 @@
             },
             "type": "array",
             "title": "Measurement Types"
+          },
+          "wind_metrics": {
+            "items": {
+              "$ref": "#/components/schemas/WindMetricOut"
+            },
+            "type": "array",
+            "title": "Wind Metrics",
+            "description": "Returned with `metrics=extended` on hourly, daily and monthly rows."
           }
         },
         "type": "object",
@@ -683,9 +781,18 @@
           "output_timezone",
           "default_input_timezone",
           "aggregations",
-          "measurement_types"
+          "measurement_types",
+          "wind_metrics"
         ],
         "title": "MetaResponse"
+      },
+      "MetricSet": {
+        "type": "string",
+        "enum": [
+          "extended"
+        ],
+        "title": "MetricSet",
+        "description": "Values of the ``metrics`` parameter."
       },
       "OutputFormat": {
         "type": "string",
@@ -910,6 +1017,65 @@
           "end"
         ],
         "title": "TimeSpanOut"
+      },
+      "WindMetric": {
+        "type": "string",
+        "enum": [
+          "speed_cubic_mean",
+          "speed_max",
+          "temperature_min",
+          "temperature_max",
+          "air_density",
+          "power_density"
+        ],
+        "title": "WindMetric",
+        "description": "Metrics returned with ``metrics=extended``."
+      },
+      "WindMetricOut": {
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/WindMetric"
+          },
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "Key of the metric in rows.",
+            "examples": [
+              "power_density_wm2"
+            ]
+          },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "examples": [
+              "Wind power density (W/m²)"
+            ]
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit",
+            "examples": [
+              "W/m²"
+            ]
+          },
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/MeasurementType"
+            },
+            "type": "array",
+            "title": "Inputs",
+            "description": "Measurement types the metric needs; it is returned only if all are requested."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "key",
+          "label",
+          "unit",
+          "inputs"
+        ],
+        "title": "WindMetricOut"
       }
     }
   }
