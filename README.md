@@ -220,15 +220,16 @@ curl "http://localhost:8000/api/v1/stations/juan-carlos-i/measurements?start=202
     "coverage": {"label": "Coverage (%)", "unit": "%"}
   },
   "data": [
-    {"station": "Juan Carlos I", "datetime": "2026-01-14T04:00:00+01:00", "period": "2026-01-14", "temperature_c": 1.91, "speed_ms": 2.09, "samples": 18, "expected_samples": 144, "coverage": 12.5},
-    {"station": "Juan Carlos I", "datetime": "2026-01-15T04:00:00+01:00", "period": "2026-01-15", "temperature_c": 2.93, "speed_ms": 2.09, "samples": 127, "expected_samples": 144, "coverage": 88.2}
+    {"station": "Juan Carlos I", "datetime": "2026-01-14T04:00:00+01:00", "period": "2026-01-14", "temperature_c": 2.05, "speed_ms": 2.23, "samples": 24, "expected_samples": 144, "coverage": 16.7},
+    {"station": "Juan Carlos I", "datetime": "2026-01-15T04:00:00+01:00", "period": "2026-01-15", "temperature_c": 2.91, "speed_ms": 2.08, "samples": 139, "expected_samples": 144, "coverage": 96.5}
   ]
 }
 ```
 
 The example shows station-local days at work. Midnight in Madrid is 20:00 of the previous day at the station, so
-the requested range touches two station days. The first one only contributes its last three hours, which its
-`coverage` makes obvious.
+the requested range touches two station days. The first one only contributes its last four hours (24 of 144
+samples), and the second one misses its last five samples, because the range ends at 03:00 in Madrid, an hour
+before the station day does; their `coverage` makes both obvious.
 
 `metadata.cache` tells whether the data came from the [cache](#cache): this was the first request for January
 2026, so it was fetched (`miss`); repeating it gives `hit`. `last_updated` is `null` because January can no
@@ -261,8 +262,8 @@ The example request above with `&format=csv` downloads `juan-carlos-i_daily_2026
 
 ```csv
 Station,Datetime,Period,Temperature (°C),Speed (m/s),Samples,Expected samples,Coverage (%)
-Juan Carlos I,2026-01-14T04:00:00+01:00,2026-01-14,1.91,2.09,18,144,12.5
-Juan Carlos I,2026-01-15T04:00:00+01:00,2026-01-15,2.93,2.09,127,144,88.2
+Juan Carlos I,2026-01-14T04:00:00+01:00,2026-01-14,2.05,2.23,24,144,16.7
+Juan Carlos I,2026-01-15T04:00:00+01:00,2026-01-15,2.91,2.08,139,144,96.5
 ```
 
 The CSV is built from the JSON response itself, so both formats always contain the same columns and values.
@@ -767,6 +768,10 @@ is not retried, because the API already retries AEMET and a 4xx does not change 
 
 ### Next steps
 
+- **More stations.** Another Antarctic station is one entry in the station registry
+  ([`backend/app/domain/stations.py`](backend/app/domain/stations.py)); stations of another AEMET network, served by a
+  different endpoint, need their own `WeatherSource` adapter. The cache, the aggregation, the API and the web app
+  work per station identifier and need no change.
 - Store AEMET's `velx`, `tmn` and `tmx` (a second schema version) for real gusts and temperature extremes.
 - Server-side pagination, with a cursor by timestamp, if ranges longer than the per-level maximums are needed.
 - A Content Security Policy in nginx that allows the charts' inline styles.
