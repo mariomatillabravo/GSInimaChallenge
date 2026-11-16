@@ -36,3 +36,8 @@
   opacity: 0.55;
   transition: opacity 0.2s;
 }
+
+.chartsMessage {
+  margin: 0 0 var(--space-3);
+  color: var(--color-text-muted);
+}

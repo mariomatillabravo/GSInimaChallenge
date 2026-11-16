@@ -1,16 +1,24 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 
 import { ApiError, measurementsUrl } from "./api/client";
 import { type SubmittedQuery, useMeasurements, useMeta, useStations } from "./api/queries";
 import styles from "./App.module.css";
 import { DemoBanner } from "./components/DemoBanner";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ErrorMessage } from "./components/ErrorMessage";
 import { Footer } from "./components/Footer";
-import { MeasurementCharts } from "./components/MeasurementCharts";
 import { MeasurementsTable } from "./components/MeasurementsTable";
 import { QueryForm } from "./components/QueryForm";
 import { ResultSummary } from "./components/ResultSummary";
 import { formFieldOf } from "./lib/queryForm";
+
+// Recharts is most of the front-end's code: the charts are fetched with the first result, so the
+// page itself loads fast. lazy() needs a default export; the module exports a named component.
+const MeasurementCharts = lazy(() =>
+  import("./components/MeasurementCharts").then((module) => ({
+    default: module.MeasurementCharts,
+  })),
+);
 
 export function App() {
   const meta = useMeta();
@@ -69,7 +77,20 @@ export function App() {
             aria-busy={measurements.isFetching}
           >
             <ResultSummary result={measurements.data} />
-            <MeasurementCharts result={measurements.data} meta={meta.data} />
+            {/* If the charts' code cannot be loaded (offline, or a new deployment replaced it), the
+                rest of the result still works. */}
+            <ErrorBoundary
+              fallback={
+                <p className={styles.chartsMessage} role="alert">
+                  The charts could not be loaded. Reload the page to try again; the table below has
+                  every value.
+                </p>
+              }
+            >
+              <Suspense fallback={<p className={styles.chartsMessage}>Loading charts…</p>}>
+                <MeasurementCharts result={measurements.data} meta={meta.data} />
+              </Suspense>
+            </ErrorBoundary>
             {/* A new result is a new table: first page, in the API's order. */}
             <MeasurementsTable
               key={measurements.dataUpdatedAt}

@@ -542,7 +542,9 @@ neighbours is drawn as a dot, since a line needs two points. When a result has m
 more than a chart is wide, a notice suggests the coarser aggregation that would show the trend more clearly, with
 its approximate number of points.
 
-Recharts adds about 107 kB gzipped to the front-end bundle; the reasons for it, and the alternatives, are in the ADR.
+The charts use Recharts, which with its dependencies weighs more than the rest of the front-end (about 107 kB against
+85 kB gzipped), so they are loaded on demand: the page loads without them, and their code arrives with the first
+result. If it cannot be loaded, a message replaces the charts and the summary and the table still work.
 
 ### The results table
 

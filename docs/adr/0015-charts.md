@@ -60,14 +60,20 @@ browser (downsampling, which silently hides data).
   aggregated rows, samples and coverage.
 - **Colours** come from CSS custom properties, one line colour validated for contrast and lightness against each
   theme's surface. CSS rules on Recharts' class names override the colours Recharts writes as SVG attributes.
+- **Loaded on demand**: the charts and Recharts are a separate chunk, fetched with the first result (`React.lazy`
+  and a dynamic import). An error boundary replaces them with a message if that chunk cannot be loaded, so the
+  summary and the table keep working.
 
 ## Consequences
 
 - On the day summer time starts, the space between the 00:00 and 12:00 ticks is eleven hours, one less than between
   12:00 and the next midnight; on the night it ends, 02:00 appears twice. Both are the real elapsed time.
 - An outage in ten-minute data shows as a break. A single surviving value between gaps shows as a dot.
-- The bundle grows from about 84 kB to about 191 kB gzipped, and Vite warns about a chunk over 500 kB. Loading the
-  charts on demand (a dynamic import) would keep the first load small.
+- Recharts and its dependencies weigh about 107 kB gzipped, more than the rest of the front-end (about 85 kB). Loaded
+  on demand, they leave the first page load unchanged; the first result waits for them once, and a "Loading charts"
+  line stands in meanwhile.
+- A deployment that replaces the chunk while a page is open makes it fail to load; the page then says the charts
+  could not be loaded and asks to reload it.
 - The colours depend on Recharts' class names (`recharts-line-curve`, `recharts-cartesian-axis-tick-value`...). A
   major Recharts upgrade must be checked visually.
 - Recharts measures its container with `ResizeObserver`, which jsdom lacks; each chart sets an initial size, which is
