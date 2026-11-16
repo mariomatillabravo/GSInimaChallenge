@@ -42,8 +42,11 @@ install:
 run:
 	$(BACKEND_RUN) uvicorn app.main:create_app --factory --reload
 
+# Make exports the variable itself: the `VAR=value command` form only works in POSIX shells, and
+# GNU Make on Windows runs recipes with cmd.exe when no sh is on the PATH.
+demo: export DEMO_MODE = true
 demo:
-	DEMO_MODE=true $(BACKEND_RUN) uvicorn app.main:create_app --factory --reload
+	$(BACKEND_RUN) uvicorn app.main:create_app --factory --reload
 
 test:
 	$(BACKEND_RUN) pytest
