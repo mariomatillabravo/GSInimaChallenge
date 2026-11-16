@@ -899,4 +899,4 @@ Run them from the repository root.
 | Part 1 | API with time zone and DST handling, aggregation, data quality fields, CSV export, demo mode, Docker | Done |
 | Part 2 | SQLite cache of AEMET data, resilience when AEMET fails, structured logging | Done |
 | Part 3 | TypeScript front-end with table and charts | Done |
-| Extras | Wind-energy metrics (cubic mean speed, maximum speed, air density, wind power density), CI polish | In progress |
+| Extras | Wind-energy metrics (cubic mean speed, maximum speed, air density, wind power density), CI polish | Done |
