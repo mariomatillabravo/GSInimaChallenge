@@ -91,12 +91,28 @@ jobs:
       - name: Build and start the stack in demo mode
         run: docker compose up --detach --build --wait
 
-      - name: Smoke test
+      - name: Smoke test the API
         run: |
           curl --fail --silent --show-error http://localhost:8000/health
           curl --fail --silent --show-error \
             "http://localhost:8000/api/v1/stations/juan-carlos-i/measurements?start=2025-03-30T00:00:00&end=2025-03-30T06:00:00&aggregation=hourly" \
             | python3 -c 'import json, sys; m = json.load(sys.stdin)["metadata"]; assert m["source"] == "demo" and m["count"] > 0, m; print(m)'
+
+      # What a browser does: load the page, then call the API through nginx on the same origin.
+      # Responses are saved to files before searching them: with pipefail (the default shell
+      # options), `curl | grep --quiet` can fail when grep stops reading before curl is done.
+      - name: Smoke test the web app through nginx
+        run: |
+          curl --fail --silent --show-error --output index.html http://localhost:8080/
+          grep --quiet '<div id="root"></div>' index.html
+          curl --fail --silent --show-error --dump-header meta.headers --output meta.json \
+            http://localhost:8080/api/v1/meta
+          grep --quiet --ignore-case '^x-request-id:' meta.headers
+          python3 -c 'import json; m = json.load(open("meta.json")); assert m["source"] == "demo", m; print(m["source"])'
+          # Built assets have a content hash in their name, so nginx lets browsers cache them for a year.
+          asset=$(grep --only-matching --max-count=1 '/assets/index-[^"]*\.js' index.html)
+          curl --fail --silent --show-error --head --output asset.headers "http://localhost:8080${asset}"
+          grep --quiet --ignore-case '^cache-control:.*immutable' asset.headers
 
       - name: Show container logs
         if: failure()
