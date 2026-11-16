@@ -113,3 +113,19 @@ class TestRangeLength:
 
     def test_no_limit_means_any_range_is_accepted(self) -> None:
         validate_range_length(self.make_range(36_500), Aggregation.MONTHLY, max_days=None)
+
+    def test_31_calendar_days_across_the_autumn_change_exceed_31_days(self) -> None:
+        # Madrid falls back on 2025-10-26: the clock repeats one hour, so the range lasts 1 h more.
+        time_range = resolve_range("2025-10-01T00:00:00", "2025-11-01T00:00:00", None)
+
+        assert time_range.end - time_range.start == timedelta(days=31, hours=1)
+        with pytest.raises(RangeTooLargeError):
+            validate_range_length(time_range, Aggregation.NONE, max_days=31)
+
+    def test_range_that_looks_longer_across_the_spring_change_is_accepted(self) -> None:
+        # Madrid springs forward on 2025-03-30: the clock skips one hour, so the range lasts 1 h
+        # less than the 31 days and 30 minutes its dates suggest.
+        time_range = resolve_range("2025-03-01T00:00:00", "2025-04-01T00:30:00", None)
+
+        assert time_range.end - time_range.start == timedelta(days=30, hours=23, minutes=30)
+        validate_range_length(time_range, Aggregation.NONE, max_days=31)

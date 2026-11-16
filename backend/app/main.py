@@ -16,7 +16,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from app.api.errors import register_error_handlers
 from app.api.middleware import RequestContextMiddleware
-from app.api.routes import health, measurements, stations
+from app.api.routes import health, measurements, meta, stations
 from app.clients.aemet import AemetAntarcticaClient
 from app.clients.recorded import RecordedWeatherSource
 from app.core.config import Settings
@@ -53,6 +53,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(RequestContextMiddleware)
     register_error_handlers(app)
     app.include_router(health.router)
+    app.include_router(meta.router)
     app.include_router(stations.router)
     app.include_router(measurements.router)
     return app

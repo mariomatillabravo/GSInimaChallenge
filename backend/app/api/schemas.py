@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from app.domain.measurements import Aggregation
+from app.domain.measurements import Aggregation, MeasurementType
 
 
 class OutputFormat(StrEnum):
@@ -129,6 +129,45 @@ class MeasurementsResponse(BaseModel):
         description="Official label and unit of every key present in the data rows."
     )
     data: list[MeasurementRow]
+
+
+class AggregationOut(BaseModel):
+    id: Aggregation = Field(description="Value of the `aggregation` parameter.")
+    max_range_days: int | None = Field(
+        examples=[31],
+        description=(
+            "Longest range accepted at this level, in days of real elapsed time: `end - start` "
+            "must not exceed `max_range_days` x 24 hours. Null means no limit. A range of N "
+            "calendar days in local time that crosses a daylight saving time change lasts N "
+            "days plus or minus one hour, so it can be rejected (autumn) or accepted although "
+            "the dates suggest it is longer (spring)."
+        ),
+    )
+
+
+class MeasurementTypeOut(BaseModel):
+    id: MeasurementType = Field(description="Value accepted by the `types` parameter.")
+    key: str = Field(examples=["temperature_c"], description="Key of the measurement in rows.")
+    label: str = Field(
+        examples=["Temperature (°C)"],
+        description="Official dataset field name, used in CSV headers and in the user interface.",
+    )
+    unit: str = Field(examples=["°C"])
+
+
+class MetaResponse(BaseModel):
+    source: Literal["aemet", "demo"] = Field(
+        description="Where this deployment reads its data from: AEMET OpenData or recorded data."
+    )
+    output_timezone: str = Field(
+        examples=["Europe/Madrid"], description="Time zone of every datetime in responses."
+    )
+    default_input_timezone: str = Field(
+        examples=["Europe/Madrid"],
+        description="Time zone of `start` and `end` when they have no offset and no `tz` is given.",
+    )
+    aggregations: list[AggregationOut] = Field(description="Levels, from finest to coarsest.")
+    measurement_types: list[MeasurementTypeOut]
 
 
 class ErrorDetail(BaseModel):

@@ -63,8 +63,12 @@ Interactive documentation is served at `/docs` (Swagger UI) and `/redoc` once th
 | Endpoint | Purpose |
 |---|---|
 | `GET /health` | Liveness check |
+| `GET /api/v1/meta` | Options and limits for building a query: aggregation levels with their maximum range, measurement types with their official labels and units, time zones, real or demo data |
 | `GET /api/v1/stations` | Stations that can be queried, with their AEMET identifiers and local time |
 | `GET /api/v1/stations/{station_id}/measurements` | Time series of a station, optionally aggregated |
+
+`/api/v1/meta` lets a client such as the front-end read these values instead of copying them: the maximum ranges
+come from the configuration (`MAX_RANGE_DAYS_*`), so a copy would silently drift when a deployment changes them.
 
 Responses larger than 1 KB are gzip-compressed when the client accepts it: one day of raw data (145 rows) goes
 from 18.5 KB to 1.5 KB.
@@ -79,6 +83,14 @@ from 18.5 KB to 1.5 KB.
 | `aggregation` | no | `none` (default), `hourly`, `daily` or `monthly` |
 | `types` | no | `temperature`, `pressure`, `speed`, comma-separated or repeated. Default: all |
 | `format` | no | `json` (default) or `csv` |
+
+**Maximum range.** Each aggregation level accepts a maximum range (`MAX_RANGE_DAYS_*` in
+[Configuration](#configuration), also returned by `/api/v1/meta`); a longer one gets a 422 that suggests a coarser
+aggregation. The length is the real time elapsed between `start` and `end`, not the difference between their
+calendar dates, because the limit exists to bound the number of records. Across a daylight saving time change the
+two differ by one hour. In Europe/Madrid, `2025-10-01T00:00:00` to `2025-11-01T00:00:00` lasts 31 days and 1 hour
+(the clock repeats an hour) and is rejected without aggregation, while `2025-03-01T00:00:00` to
+`2025-04-01T00:30:00` lasts 30 days, 23 hours and 30 minutes (the clock skips an hour) and is accepted.
 
 ### Example
 
@@ -514,9 +526,9 @@ git-ignored. To start, copy [`backend/.env.example`](backend/.env.example) to `b
 | `AEMET_BASE_URL` | `https://opendata.aemet.es/opendata` | AEMET OpenData base URL |
 | `AEMET_TIMEOUT_SECONDS` | `30` | Timeout of each HTTP request to AEMET |
 | `AEMET_MAX_ATTEMPTS` | `3` | Attempts per monthly window when AEMET fails transiently |
-| `MAX_RANGE_DAYS_NONE` | `31` | Longest range accepted without aggregation (about 4,500 ten-minute records) |
-| `MAX_RANGE_DAYS_HOURLY` | `366` | Longest range accepted with hourly aggregation |
-| `MAX_RANGE_DAYS_DAILY` | `3660` | Longest range accepted with daily aggregation (ten years) |
+| `MAX_RANGE_DAYS_NONE` | `31` | Longest range accepted without aggregation, in days of real elapsed time (about 4,500 ten-minute records). See [Maximum range](#measurement-parameters) |
+| `MAX_RANGE_DAYS_HOURLY` | `366` | Longest range accepted with hourly aggregation, in days of real elapsed time |
+| `MAX_RANGE_DAYS_DAILY` | `3660` | Longest range accepted with daily aggregation, in days of real elapsed time (ten years) |
 | `MAX_RANGE_DAYS_MONTHLY` | none | Longest range accepted with monthly aggregation (unlimited by default) |
 
 `DEMO_MODE` defaults to `false` on purpose: a deployment that forgets its API key refuses to start with a clear

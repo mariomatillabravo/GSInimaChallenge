@@ -6,15 +6,19 @@ from datetime import tzinfo
 from typing import Any, Final
 
 from app.api.schemas import (
+    AggregationOut,
     CacheInfo,
     FieldInfo,
     MeasurementRow,
     MeasurementsResponse,
+    MeasurementTypeOut,
+    MetaResponse,
     ResponseMetadata,
     StationOut,
     StationRef,
     TimeSpanOut,
 )
+from app.core.config import Settings
 from app.domain.aggregation import SeriesRow
 from app.domain.measurements import (
     COVERAGE_LABEL,
@@ -29,8 +33,13 @@ from app.domain.measurements import (
 )
 from app.domain.sources import AvailableRange
 from app.domain.stations import Station
-from app.domain.timezones import OUTPUT_TIMEZONE, describe_timezone, format_output_datetime
-from app.services.measurements import MeasurementResult
+from app.domain.timezones import (
+    DEFAULT_INPUT_TIMEZONE,
+    OUTPUT_TIMEZONE,
+    describe_timezone,
+    format_output_datetime,
+)
+from app.services.measurements import MeasurementResult, SourceLabel
 
 VALUE_DECIMALS = 2
 """Output values are rounded for readability; AEMET itself publishes one decimal."""
@@ -50,6 +59,28 @@ def present_station(station: Station, available: AvailableRange | None = None) -
         altitude_m=station.altitude_m,
         timezone=timezone_name(station.local_timezone),
         available_range=_time_span(available) if available else None,
+    )
+
+
+def present_meta(settings: Settings, source: SourceLabel) -> MetaResponse:
+    """Options and limits of this deployment, in canonical order, from their single definitions."""
+    return MetaResponse(
+        source=source,
+        output_timezone=OUTPUT_TIMEZONE.key,
+        default_input_timezone=DEFAULT_INPUT_TIMEZONE.key,
+        aggregations=[
+            AggregationOut(id=level, max_range_days=settings.max_range_days(level))
+            for level in Aggregation
+        ],
+        measurement_types=[
+            MeasurementTypeOut(
+                id=kind,
+                key=MEASUREMENT_FIELDS[kind].key,
+                label=MEASUREMENT_FIELDS[kind].label,
+                unit=MEASUREMENT_FIELDS[kind].unit,
+            )
+            for kind in MeasurementType
+        ],
     )
 
 
