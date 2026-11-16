@@ -9,6 +9,23 @@ Web API that retrieves, caches and aggregates weather data from the Spanish Anta
 ![The web app in demo mode: hourly means of Juan Carlos I across the change to summer time on 30 March 2025, as
 charts of temperature, pressure and wind speed above the table of rows](docs/images/web-app.png)
 
+**Contents**
+
+- [Quickstart](#quickstart): run it in one minute, without an API key
+- [Architecture](#architecture): components, the life of a request, where the code lives
+- [API](#api): endpoints, parameters, CSV export, wind-energy metrics, errors
+- [Data source](#data-source): AEMET OpenData and how its data is cleaned
+- [Time zone handling](#time-zone-handling): Madrid input and output, daylight saving time, station time
+- [Aggregation](#aggregation): station-local buckets and data quality fields
+- [Cache](#cache): freshness, behaviour when AEMET fails, storage
+- [Logging](#logging): request IDs, text and JSON lines
+- [Limits and scaling](#limits-and-scaling): known limits and how the service would grow
+- [Front-end](#front-end): the web app, its form, charts and table
+- [Limitations and next steps](#limitations-and-next-steps)
+- [Design decisions](#design-decisions): the architecture decision records
+- [Development](#development): prerequisites, configuration, tests, commands
+- [Project status](#project-status)
+
 ## Quickstart
 
 ### Run it in one minute, without an API key
@@ -60,6 +77,81 @@ returns an empty result with a notice; `GET /api/v1/stations` shows the exact re
 3. Run `make run`, or with Docker `DEMO_MODE=false docker compose up --build`
    (PowerShell: `$env:DEMO_MODE="false"; docker compose up --build`).
 
+## Architecture
+
+```mermaid
+flowchart LR
+    browser["Browser"] -->|"page and /api/..."| web["nginx in Docker (:8080)<br/>or the Vite dev server"]
+    web -->|"/api/..."| api
+    scripts["curl, scripts"] --> api
+    subgraph backend ["Backend: Python, FastAPI, synchronous"]
+        api["API routes (:8000)"] --> service["MeasurementService<br/>cache-first by UTC month"]
+        service --> repository["CacheRepository"]
+        repository --> sqlite[("SQLite cache<br/>WAL")]
+        service --> source["WeatherSource"]
+        source --> aemetclient["AEMET client"]
+        source --> recorded["Recorded source<br/>(demo mode)"]
+    end
+    aemetclient -->|"HTTPS, two steps per month"| aemet["AEMET OpenData"]
+    recorded --> files[("Recorded AEMET responses<br/>March 2025")]
+```
+
+The browser only talks to the origin that served the page: nginx (or the Vite dev server) serves the web app and
+forwards `/api/...` to the API, so no CORS is needed. Behind the API, one service reads every range from the SQLite
+cache, fetching first the months that are missing or expired. It reaches the data through a `WeatherSource`
+interface with two implementations, the AEMET client and the recorded source of demo mode, which share the same
+parser, so demo mode runs the real code path.
+
+The life of a request for measurements:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant A as API route
+    participant S as MeasurementService
+    participant DB as SQLite cache
+    participant W as WeatherSource
+    C->>A: GET measurements (start, end, aggregation, types)
+    A->>A: Interpret the times in Madrid, reject DST gaps and overlaps, check the range
+    A->>S: Query
+    S->>DB: Which months of the range are cached, and when were they fetched?
+    loop Each month that is missing or expired
+        alt AEMET answers (one fetch per month, shared by concurrent requests)
+            S->>W: Fetch the month
+            W-->>S: Cleaned observations
+            S->>DB: Replace the whole month
+        else AEMET fails or is cooling down, and the month has a copy
+            S->>S: Serve the old copy, marked as stale
+        else AEMET fails or is cooling down, and the month has no copy
+            S-->>A: Upstream error
+            A-->>C: 502, 503 with Retry-After, or 504
+        end
+    end
+    S->>DB: Read the whole range
+    S->>S: Aggregate in station-local buckets, add wind-energy metrics if asked
+    S-->>A: Rows and cache report
+    A-->>C: JSON or CSV with X-Cache-Status, X-Data-Stale and X-Request-ID
+```
+
+Where the code lives:
+
+| Path | What it holds |
+|---|---|
+| [`backend/app/main.py`](backend/app/main.py) | Application factory: settings, logging, database and dependency wiring |
+| [`backend/app/api/`](backend/app/api/) | Routes, response schemas, presenters (JSON and CSV), error mapping, request ID middleware |
+| [`backend/app/services/`](backend/app/services/) | The measurement service (cache-first reads and fetches), single flight, circuit breaker |
+| [`backend/app/domain/`](backend/app/domain/) | Pure logic: time ranges and DST rules, time zones, monthly chunks, freshness, aggregation, wind-energy metrics, stations, measurement definitions |
+| [`backend/app/clients/`](backend/app/clients/) | AEMET client, recorded source for demo mode, the shared parser and cleaning rule |
+| [`backend/app/db/`](backend/app/db/) | SQLite engine and connection settings, schema and its version, repository |
+| [`backend/app/core/`](backend/app/core/) | Configuration, exceptions, the injected clock, logging |
+| [`backend/scripts/`](backend/scripts/) | OpenAPI export, demo data recording, AEMET exploration |
+| [`backend/tests/`](backend/tests/) | Unit tests (pure logic, clients with mocked HTTP) and integration tests (the whole HTTP stack on real SQLite files) |
+| [`frontend/src/api/`](frontend/src/api/) | Typed client, types generated from the OpenAPI document, TanStack Query hooks |
+| [`frontend/src/lib/`](frontend/src/lib/) | Pure logic: form rules and ranges, table sorting and paging, chart ticks and gaps, datetime formatting |
+| [`frontend/src/components/`](frontend/src/components/) | Query form, result summary, charts, table, demo banner, error display |
+| [`docs/`](docs/) | Architecture decision records, notes on the AEMET API, the screenshot above |
+
 ## API
 
 Interactive documentation is served at `/docs` (Swagger UI) and `/redoc` once the API is running.
@@ -67,7 +159,7 @@ Interactive documentation is served at `/docs` (Swagger UI) and `/redoc` once th
 | Endpoint | Purpose |
 |---|---|
 | `GET /health` | Liveness check |
-| `GET /api/v1/meta` | Options and limits for building a query: aggregation levels with their maximum range, measurement types with their official labels and units, time zones, real or demo data |
+| `GET /api/v1/meta` | Options and limits for building a query: aggregation levels with their maximum range, measurement types and wind-energy metrics with their labels and units, time zones, real or demo data |
 | `GET /api/v1/stations` | Stations that can be queried, with their AEMET identifiers and local time |
 | `GET /api/v1/stations/{station_id}/measurements` | Time series of a station, optionally aggregated |
 
@@ -348,8 +440,8 @@ other instant survives the round trip to Madrid time and back.
 ### Station local time
 
 Daily and monthly aggregation cut days and months in the stations' local time, a fixed `UTC-03:00`. The bases
-operate seasonally (November to March) in a region that uses UTC−03:00 all year round, and a fixed offset keeps
-every station day exactly 24 hours long. The full reasoning, including the rejected `America/Punta_Arenas`, is in
+operate seasonally (November to March), months in which even historical Chilean time was UTC−03:00, and a fixed
+offset keeps every station day exactly 24 hours long. The clock actually used at the bases could not be verified. The full reasoning, including the rejected `America/Punta_Arenas`, is in
 [ADR-0002](docs/adr/0002-time-zone-strategy.md).
 
 ## Aggregation
@@ -527,13 +619,6 @@ How it would grow, step by step, each step only when the previous one is not eno
 5. **Parallel fetches** of the months of one request, bounded by AEMET's rate limits, to shorten the first
    request for a long range.
 
-### Future evolution
-
-Deliberately out of scope for this project, and natural next steps for a production service: authentication and
-authorization, Kubernetes or cloud deployment, splitting into microservices, message queues (for example to
-drive the background ingestion above), real PostgreSQL or Redis deployments, and internationalization of the
-interface.
-
 ## Front-end
 
 The web interface in [`frontend/`](frontend/) is a single-page application in React and strict TypeScript, built
@@ -658,6 +743,43 @@ an `ApiError` holding what the API said (code, message, offending parameter), th
 `Retry-After`, so error messages can show the request ID to look for in the logs. TanStack Query caches the answers:
 the options and the stations are fetched once, a network failure is retried once, and an error answer from the API
 is not retried, because the API already retries AEMET and a 4xx does not change by repeating it.
+
+## Limitations and next steps
+
+### Known limitations
+
+- **Maximum speed is not a gust**, and the temperature extremes are ten-minute means: AEMET's values within each ten
+  minutes (`velx`, `tmn`, `tmx`) are not stored ([Wind-energy metrics](#wind-energy-metrics)).
+- **The wind-energy metrics describe the site at sensor height** (about 10 m, below a turbine's hub), assume dry
+  air, and give the power of the wind, not of a turbine ([Wind-energy metrics](#wind-energy-metrics)).
+- **Station local time is a fixed UTC−03:00**; the clock actually used at the bases could not be verified
+  ([Station local time](#station-local-time)).
+- **The 48-hour grace** after which a month is final is an assumption until AEMET's publication delay is known
+  ([Freshness](#freshness)).
+- **Some AEMET details are unverified**: the exact answers for a rejected key (401) and for rate limiting (429), the
+  real limits, and how long a data URL stays valid ([AEMET notes](docs/aemet-api.md#still-to-verify)).
+- **The demo covers one month** (March 2025, both stations); other ranges return an empty result with a notice.
+- **One process on one host**: fetch coordination and the circuit breaker live in each process
+  ([Limits and scaling](#limits-and-scaling)).
+- **The web app works in Madrid time only**; the API's `tz` parameter is not offered in the form
+  ([The query form](#the-query-form)).
+- **A failed CSV download shows no message**: the browser cancels it ([The results table](#the-results-table)).
+
+### Next steps
+
+- Store AEMET's `velx`, `tmn` and `tmx` (a second schema version) for real gusts and temperature extremes.
+- Server-side pagination, with a cursor by timestamp, if ranges longer than the per-level maximums are needed.
+- A Content Security Policy in nginx that allows the charts' inline styles.
+- A time zone selector in the form, for users outside Spain.
+- Remembering the last query in the browser.
+- Wind speed at hub height, extrapolated with a wind shear model and site parameters.
+- The scaling path described in [Limits and scaling](#limits-and-scaling).
+
+### Out of scope
+
+Deliberately out of scope for this project, and natural next steps for a production service: authentication and
+authorization, Kubernetes or cloud deployment, splitting into microservices, message queues (for example to
+drive background ingestion), real PostgreSQL or Redis deployments, and internationalization of the interface.
 
 ## Design decisions
 
