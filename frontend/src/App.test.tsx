@@ -109,6 +109,20 @@ describe("App", () => {
     );
   });
 
+  it("draws one chart per measurement, between the summary and the table", async () => {
+    serveDemo();
+    const { user } = await renderApp();
+
+    await submit(user);
+
+    const charts = await screen.findByRole("region", { name: "Charts" });
+    expect(within(charts).getAllByRole("figure")).toHaveLength(3);
+    const summary = screen.getByRole("region", { name: "Result" });
+    const table = screen.getByRole("table");
+    expect(summary.compareDocumentPosition(charts)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(charts.compareDocumentPosition(table)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
   it("keeps the rows but hides the CSV link while the next query loads", async () => {
     let requests = 0;
     serveDemo(() => {
@@ -129,7 +143,7 @@ describe("App", () => {
     await waitFor(() => {
       expect(screen.queryByRole("link", { name: "Download CSV" })).not.toBeInTheDocument();
     });
-    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.getByRole("table").closest("[aria-busy]")).toHaveAttribute("aria-busy", "true");
   });
 
   it("starts each new result in the API's order", async () => {

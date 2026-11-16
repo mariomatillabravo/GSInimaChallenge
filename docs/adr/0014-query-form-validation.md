@@ -45,7 +45,7 @@ half-typed values).
   error is shown in an alert.
 - **At least one measurement** must be selected; all of them are selected at the start.
 - **The query runs on submit.** Submitting the same query again fetches it again (for example after a 503), and the
-  previous result stays on screen while a new one loads.
+  previous result stays on screen, dimmed, while a new one loads.
 - **Defaults**: hourly means of every measurement for the first station. In demo mode, the last two days of its
   recorded data, from midnight to midnight; with the current recording this covers the change to summer time on
   30 March 2025 (48 hourly rows for 47 hours, because the end is included). With real data, the last seven days, from

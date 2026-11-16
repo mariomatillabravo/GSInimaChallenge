@@ -6,6 +6,7 @@ import styles from "./App.module.css";
 import { DemoBanner } from "./components/DemoBanner";
 import { ErrorMessage } from "./components/ErrorMessage";
 import { Footer } from "./components/Footer";
+import { MeasurementCharts } from "./components/MeasurementCharts";
 import { MeasurementsTable } from "./components/MeasurementsTable";
 import { QueryForm } from "./components/QueryForm";
 import { ResultSummary } from "./components/ResultSummary";
@@ -61,16 +62,21 @@ export function App() {
         {measurements.error !== null && fieldError === null ? (
           <ErrorMessage error={measurements.error} />
         ) : null}
-        {measurements.data ? (
-          <>
+        {measurements.data && meta.data ? (
+          // While a query loads, the previous result stays, dimmed, instead of a blank page.
+          <div
+            className={measurements.isFetching ? styles.refreshing : undefined}
+            aria-busy={measurements.isFetching}
+          >
             <ResultSummary result={measurements.data} />
+            <MeasurementCharts result={measurements.data} meta={meta.data} />
             {/* A new result is a new table: first page, in the API's order. */}
             <MeasurementsTable
               key={measurements.dataUpdatedAt}
               result={measurements.data}
               csvUrl={csvUrl}
             />
-          </>
+          </div>
         ) : null}
       </main>
       <Footer />

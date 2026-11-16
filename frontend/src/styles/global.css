@@ -15,6 +15,8 @@
   --color-danger: #cf222e;
   --color-danger-bg: #ffebe9;
   --color-on-accent: #ffffff;
+  /* Validated for charts against the light surface (lightness band, chroma, 3:1 contrast). */
+  --color-chart-line: #0b5cad;
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -43,6 +45,8 @@
     --color-danger: #f85149;
     --color-danger-bg: #3c1618;
     --color-on-accent: #0d1117;
+    /* The dark accent is too light for a chart line on this surface; one step darker. */
+    --color-chart-line: #3987e5;
   }
 }
 

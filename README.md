@@ -519,13 +519,34 @@ aggregation level, with one hour of margin: across a daylight saving time change
 measures, differs from the calendar difference by up to an hour (see [Maximum range](#measurement-parameters)). The
 form therefore never blocks a range the API accepts, and the API's answer settles the doubtful cases. When the API
 rejects a parameter, such as a local time that does not exist, its message appears next to that field with the
-request ID; any other error appears in an alert. After a successful query, a summary shows the number of rows, how
-the dates were interpreted, whether the data came from the cache, a warning when part of it is a stale copy, and the
-API's notice when the range has no data.
+request ID; any other error appears in an alert. While a query loads, the previous result stays on screen, dimmed,
+instead of leaving a blank page. After a successful query, a summary shows the number of rows, how the dates were
+interpreted, whether the data came from the cache, a warning when part of it is a stale copy, and the API's notice
+when the range has no data.
+
+### Charts
+
+Below the summary, one chart per requested measurement shows it over time, all stacked on the same time axis, each
+with its own scale ([ADR-0015](docs/adr/0015-charts.md)). Moving the cursor over one chart shows the reading at that
+moment on all of them: the value with its unit, the datetime with its UTC offset and, for aggregated rows, samples
+and coverage.
+
+The time axis is real time: each row sits at its instant, read from the API's datetime and its offset, not at its
+position in the list. On the day summer time starts, the default demo query shows it: the 00:00 and 12:00 ticks are
+eleven hours apart, one less than 12:00 and the next midnight, because Madrid's clocks skipped from 02:00 to 03:00.
+Ticks fall on round Madrid hours, days, months or years, whatever the browser's time zone.
+
+Gaps stay visible. Empty buckets arrive with null values and break the line; for ten-minute records, where a
+missing record is simply absent, a break is added wherever more than ten minutes pass without one. A value with no
+neighbours is drawn as a dot, since a line needs two points. When a result has more than 1,000 points per chart,
+more than a chart is wide, a notice suggests the coarser aggregation that would show the trend more clearly, with
+its approximate number of points.
+
+Recharts adds about 107 kB gzipped to the front-end bundle; the reasons for it, and the alternatives, are in the ADR.
 
 ### The results table
 
-Below the summary, a table shows the rows with the official labels of the response's `fields` block, in the API's
+Below the charts, a table shows the rows with the official labels of the response's `fields` block, in the API's
 order, so a field added to the API appears without changing the front-end. The station column is left out: a query
 covers one station, and the summary names it. Each datetime keeps its UTC offset (`2025-10-26 02:00 +01:00`),
 because on the night summer time ends Madrid lives 02:00 to 03:00 twice and the offset tells the two rows apart. A
@@ -585,6 +606,7 @@ its context, the options considered and its consequences.
 | [0012](docs/adr/0012-frontend-stack.md) | React + Vite front-end in strict TypeScript 5.9 (not 7, which the type-aware tooling does not support yet), ESLint + Prettier + Vitest, same-origin calls through a proxy instead of CORS, CSS Modules |
 | [0013](docs/adr/0013-frontend-api-client.md) | Front-end types generated from a committed OpenAPI document with drift checks in CI, a small `fetch` client whose errors keep the request ID, TanStack Query retrying network failures only |
 | [0014](docs/adr/0014-query-form-validation.md) | The query form checks ranges on calendar values with one hour of margin and leaves daylight saving time cases to the API, validates on submit, shows API parameter errors next to their field, and starts on a query with data |
+| [0015](docs/adr/0015-charts.md) | Recharts small multiples on a shared time axis by instant, ticks on Madrid's calendar, visible gaps in ten-minute data, and a suggested coarser aggregation above 1,000 points |
 
 ## Development
 
