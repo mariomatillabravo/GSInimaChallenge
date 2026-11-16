@@ -523,6 +523,32 @@ request ID; any other error appears in an alert. After a successful query, a sum
 the dates were interpreted, whether the data came from the cache, a warning when part of it is a stale copy, and the
 API's notice when the range has no data.
 
+### The results table
+
+Below the summary, a table shows the rows with the official labels of the response's `fields` block, in the API's
+order, so a field added to the API appears without changing the front-end. The station column is left out: a query
+covers one station, and the summary names it. Each datetime keeps its UTC offset (`2025-10-26 02:00 +01:00`),
+because on the night summer time ends Madrid lives 02:00 to 03:00 twice and the offset tells the two rows apart. A
+dash means no data.
+
+Clicking a header sorts by that column, ascending first, then switching direction. Datetimes sort by instant, not as
+text: `2025-10-26T02:00:00+01:00` sorts before `2025-10-26T02:00:00+02:00` as text, yet it happens an hour later.
+Rows without a value go last in both directions. The rows are paginated in the browser, 50 per page: the maximum
+range of each aggregation level keeps a response under about 9,000 rows (a year of hourly means), which the browser
+sorts in an instant but would render slowly all at once (see [Limits and scaling](#limits-and-scaling)). A new
+result starts on the first page, in the API's order.
+
+A `coverage` below 90 % is marked with ⚠, and in words for screen readers: the bucket has fewer observations than
+a complete one, so its means are less representative (see [Data quality fields](#data-quality-fields)). The first
+and last buckets show it when the range starts or ends partway through them; the default demo query, for example,
+ends at midnight, and since the end is included, its last hour holds a single observation.
+
+**Download CSV** is a plain link to the same query with `format=csv`. The file is the API's own export, with the
+same labels and byte order mark, instead of a second CSV writer in TypeScript, and the cache serves it without
+calling AEMET again. The link always matches the table on screen: it is hidden while the next query loads. If the
+CSV request fails, Chrome cancels the download and the page stays as it was, without showing the API's message;
+this is unlikely, since the same query has just succeeded and its months are cached.
+
 ### Talking to the API
 
 The TypeScript types of every request and response are generated from the API's OpenAPI document

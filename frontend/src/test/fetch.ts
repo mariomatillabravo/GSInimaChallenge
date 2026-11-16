@@ -12,10 +12,11 @@ export function jsonResponse(
 
 /**
  * Replace the global fetch with a fake that answers each path with a fresh response (a response
- * body can only be read once). Requests to other paths fail the test. Vitest restores the real
- * fetch after each test (unstubGlobals in vite.config.ts).
+ * body can only be read once); a route may return a promise that never settles, to keep a request
+ * in flight. Requests to other paths fail the test. Vitest restores the real fetch after each
+ * test (unstubGlobals in vite.config.ts).
  */
-export function stubFetch(routes: Record<string, () => Response>) {
+export function stubFetch(routes: Record<string, () => Response | Promise<Response>>) {
   const fake = vi.fn((url: string) => {
     const path = url.split("?")[0] ?? url;
     const route = routes[path];

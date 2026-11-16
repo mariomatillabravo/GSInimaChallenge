@@ -1,11 +1,12 @@
 import { useState } from "react";
 
-import { ApiError } from "./api/client";
+import { ApiError, measurementsUrl } from "./api/client";
 import { type SubmittedQuery, useMeasurements, useMeta, useStations } from "./api/queries";
 import styles from "./App.module.css";
 import { DemoBanner } from "./components/DemoBanner";
 import { ErrorMessage } from "./components/ErrorMessage";
 import { Footer } from "./components/Footer";
+import { MeasurementsTable } from "./components/MeasurementsTable";
 import { QueryForm } from "./components/QueryForm";
 import { ResultSummary } from "./components/ResultSummary";
 import { formFieldOf } from "./lib/queryForm";
@@ -22,6 +23,13 @@ export function App() {
     measurements.error instanceof ApiError && formFieldOf(measurements.error.parameter) !== null
       ? measurements.error
       : null;
+
+  // While the next query loads, the previous result stays on screen; its CSV link is hidden,
+  // because the submitted query is already the new one.
+  const csvUrl =
+    query === null || measurements.isPlaceholderData
+      ? null
+      : measurementsUrl(query.stationId, { ...query.params, format: "csv" });
 
   function handleSubmit(next: SubmittedQuery) {
     // The same query again (for example after a 503) would hit the same cache entry: fetch again.
@@ -53,7 +61,17 @@ export function App() {
         {measurements.error !== null && fieldError === null ? (
           <ErrorMessage error={measurements.error} />
         ) : null}
-        {measurements.data ? <ResultSummary result={measurements.data} /> : null}
+        {measurements.data ? (
+          <>
+            <ResultSummary result={measurements.data} />
+            {/* A new result is a new table: first page, in the API's order. */}
+            <MeasurementsTable
+              key={measurements.dataUpdatedAt}
+              result={measurements.data}
+              csvUrl={csvUrl}
+            />
+          </>
+        ) : null}
       </main>
       <Footer />
     </div>

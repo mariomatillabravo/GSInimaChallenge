@@ -11,7 +11,9 @@ import { renderWithQueryClient } from "./test/render";
 const MEASUREMENTS = "/api/v1/stations/juan-carlos-i/measurements";
 
 /** Serves the demo API; the measurements path answers with `measurements`. */
-function serveDemo(measurements: () => Response = () => jsonResponse(dailyMeasurements)) {
+function serveDemo(
+  measurements: () => Response | Promise<Response> = () => jsonResponse(dailyMeasurements),
+) {
   return stubFetch({
     "/api/v1/meta": () => jsonResponse(demoMeta),
     "/api/v1/stations": () => jsonResponse(demoStations),
@@ -87,6 +89,68 @@ describe("App", () => {
     expect(summary).toHaveTextContent("3 rows · Juan Carlos I · Daily means");
     expect(summary).toHaveTextContent(
       "2025-03-30 00:00 to 2025-04-01 00:00 (Europe/Madrid (default)) · Fetched from the recorded data",
+    );
+  });
+
+  it("shows the rows in a table, with a link to the same query as CSV", async () => {
+    serveDemo();
+    const { user } = await renderApp();
+
+    await user.selectOptions(screen.getByLabelText("Aggregation"), "daily");
+    await submit(user);
+
+    const table = await screen.findByRole("table", { name: "Daily means, Juan Carlos I" });
+    expect(within(table).getAllByRole("row")).toHaveLength(1 + dailyMeasurements.data.length);
+    const link = screen.getByRole("link", { name: "Download CSV" });
+    expect(link).toHaveAttribute(
+      "href",
+      `${MEASUREMENTS}?start=2025-03-30T00%3A00%3A00&end=2025-04-01T00%3A00%3A00` +
+        "&aggregation=daily&types=temperature&types=pressure&types=speed&format=csv",
+    );
+  });
+
+  it("keeps the rows but hides the CSV link while the next query loads", async () => {
+    let requests = 0;
+    serveDemo(() => {
+      requests += 1;
+      return requests === 1
+        ? jsonResponse(dailyMeasurements)
+        : new Promise<Response>(() => {
+            // The second request never answers.
+          });
+    });
+    const { user } = await renderApp();
+    await submit(user);
+    await screen.findByRole("link", { name: "Download CSV" });
+
+    await user.selectOptions(screen.getByLabelText("Aggregation"), "monthly");
+    await submit(user);
+
+    await waitFor(() => {
+      expect(screen.queryByRole("link", { name: "Download CSV" })).not.toBeInTheDocument();
+    });
+    expect(screen.getByRole("table")).toBeInTheDocument();
+  });
+
+  it("starts each new result in the API's order", async () => {
+    serveDemo();
+    const { user } = await renderApp();
+    await submit(user);
+    const temperature = await screen.findByRole("columnheader", { name: "Temperature (°C)" });
+    await user.click(within(temperature).getByRole("button"));
+    expect(temperature).toHaveAttribute("aria-sort", "ascending");
+
+    await user.selectOptions(screen.getByLabelText("Aggregation"), "daily");
+    await submit(user);
+
+    await waitFor(() => {
+      expect(screen.getByRole("columnheader", { name: "Datetime" })).toHaveAttribute(
+        "aria-sort",
+        "ascending",
+      );
+    });
+    expect(screen.getByRole("columnheader", { name: "Temperature (°C)" })).not.toHaveAttribute(
+      "aria-sort",
     );
   });
 
