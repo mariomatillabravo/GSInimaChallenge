@@ -4,7 +4,10 @@
 
 Web API that retrieves, caches and aggregates weather data from the Spanish Antarctic stations
 (Juan Carlos I and Gabriel de Castilla) published by
-[AEMET OpenData](https://opendata.aemet.es/centrodedescargas/inicio).
+[AEMET OpenData](https://opendata.aemet.es/centrodedescargas/inicio), with a web app to query and chart it.
+
+![The web app in demo mode: hourly means of Juan Carlos I across the change to summer time on 30 March 2025, as
+charts of temperature, pressure and wind speed above the table of rows](docs/images/web-app.png)
 
 ## Quickstart
 
