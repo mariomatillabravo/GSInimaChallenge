@@ -15,6 +15,8 @@ export type TimeSpan = Schemas["TimeSpanOut"];
 export type MeasurementsResponse = Schemas["MeasurementsResponse"];
 export type MeasurementsQuery =
   paths["/api/v1/stations/{station_id}/measurements"]["get"]["parameters"]["query"];
+export type AggregationId = MetaResponse["aggregations"][number]["id"];
+export type MeasurementTypeId = MetaResponse["measurement_types"][number]["id"];
 type ErrorBody = Schemas["ErrorResponse"];
 
 /** A failed answer from the API (any status other than 2xx). */

@@ -504,6 +504,25 @@ to find the current suite"; `cd /d C:\...` avoids it.
 Styles are CSS Modules, one per component, sharing the colours and spacing defined as CSS custom properties in
 [`src/styles/global.css`](frontend/src/styles/global.css); the page follows the system's light or dark theme.
 
+### The query form
+
+The form asks for a station, a start and an end (included), an aggregation level and at least one measurement, and
+sends the query when it is submitted ([ADR-0014](docs/adr/0014-query-form-validation.md)). Dates and times are typed
+in Madrid time, the API's default, whatever the browser's time zone. The options, the official measurement labels and
+the maximum range of each aggregation level come from `/api/v1/meta`.
+
+It starts on a query that returns data: in demo mode, hourly means of the last two recorded days, which cover the
+change to summer time on 30 March 2025; with real data, the last seven days.
+
+Before sending, the form checks that the end is later than the start and that the range is not too long for the
+aggregation level, with one hour of margin: across a daylight saving time change the real duration, which the API
+measures, differs from the calendar difference by up to an hour (see [Maximum range](#measurement-parameters)). The
+form therefore never blocks a range the API accepts, and the API's answer settles the doubtful cases. When the API
+rejects a parameter, such as a local time that does not exist, its message appears next to that field with the
+request ID; any other error appears in an alert. After a successful query, a summary shows the number of rows, how
+the dates were interpreted, whether the data came from the cache, a warning when part of it is a stale copy, and the
+API's notice when the range has no data.
+
 ### Talking to the API
 
 The TypeScript types of every request and response are generated from the API's OpenAPI document
@@ -539,6 +558,7 @@ its context, the options considered and its consequences.
 | [0011](docs/adr/0011-logging.md) | Standard logging with a small JSON formatter, a request ID carried in a context variable and echoed as `X-Request-ID`, one access line per request, UTC timestamps |
 | [0012](docs/adr/0012-frontend-stack.md) | React + Vite front-end in strict TypeScript 5.9 (not 7, which the type-aware tooling does not support yet), ESLint + Prettier + Vitest, same-origin calls through a proxy instead of CORS, CSS Modules |
 | [0013](docs/adr/0013-frontend-api-client.md) | Front-end types generated from a committed OpenAPI document with drift checks in CI, a small `fetch` client whose errors keep the request ID, TanStack Query retrying network failures only |
+| [0014](docs/adr/0014-query-form-validation.md) | The query form checks ranges on calendar values with one hour of margin and leaves daylight saving time cases to the API, validates on submit, shows API parameter errors next to their field, and starts on a query with data |
 
 ## Development
 

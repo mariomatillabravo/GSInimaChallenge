@@ -1,6 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, skipToken, useQuery } from "@tanstack/react-query";
 
-import { fetchMeta, fetchStations } from "./client";
+import { fetchMeasurements, fetchMeta, fetchStations, type MeasurementsQuery } from "./client";
 
 /** Options and limits of the API. They only change when the API restarts. */
 export function useMeta() {
@@ -17,5 +17,26 @@ export function useStations() {
     queryKey: ["stations"],
     queryFn: ({ signal }) => fetchStations(signal),
     staleTime: Infinity,
+  });
+}
+
+/** A query the user submitted with the form. */
+export interface SubmittedQuery {
+  stationId: string;
+  params: MeasurementsQuery;
+}
+
+/**
+ * The measurements of the last submitted query; nothing is requested before the first one
+ * (skipToken). While a new query loads, the previous result stays on screen.
+ */
+export function useMeasurements(query: SubmittedQuery | null) {
+  return useQuery({
+    queryKey: ["measurements", query],
+    queryFn:
+      query === null
+        ? skipToken
+        : ({ signal }) => fetchMeasurements(query.stationId, query.params, signal),
+    placeholderData: keepPreviousData,
   });
 }
