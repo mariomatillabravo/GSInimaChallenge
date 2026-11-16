@@ -3,7 +3,7 @@
   "info": {
     "title": "AEMET Antarctica Weather API",
     "description": "Retrieves and aggregates weather data from the Spanish Antarctic stations published by AEMET OpenData. Output datetimes are in Europe/Madrid with their UTC offset.",
-    "version": "0.2.0"
+    "version": "0.3.0"
   },
   "paths": {
     "/health": {
