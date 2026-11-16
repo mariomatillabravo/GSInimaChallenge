@@ -69,6 +69,9 @@ Each completed block gets an annotated tag: `v0.1.0` (Part 1), `v0.2.0` (Part 2)
 - **API types**: generated from the committed `frontend/openapi.json` (`make api-types`); `openapi-check` and `front-types-check` fail on drift. TanStack Query retries network failures once and API errors never; errors keep the request ID (ADR-0013).
 - **Form**: inputs are Madrid wall-clock times, never turned into a browser-zone `Date`; ranges are checked on calendar values with one hour of margin, and the API's 422 settles DST cases (ADR-0014).
 - **Results**: table columns come from the response's `fields`, datetimes show their offset and sort by instant, coverage below 90 % is flagged in words, CSV is the API's own export; charts are Recharts small multiples on a time axis by instant with visible gaps, loaded on demand (ADR-0015).
+- **Wind-energy metrics**: optional `metrics=extended` on aggregated levels, each metric only when its input types are requested; air density and power density are computed per observation before averaging; maximum speed and temperature extremes come from the ten-minute means, not gusts (ADR-0016).
+- **Discarded records**: the parser only counts them; each adapter logs the count per fetched month at INFO, when there are any.
+- **Coverage**: CI measures backend line and branch coverage with `make coverage` and fails below 95 %; front-end coverage is reported without a threshold.
 - **Commands**: a Makefile provides shortcuts; the README lists the full equivalent command for every target.
 
 ## Out of scope
