@@ -28,8 +28,9 @@ make install
 make demo
 ```
 
-Then open the interactive documentation at <http://localhost:8000/docs>, or look at the Madrid spring DST change
-of 2025 hour by hour:
+With Docker, the web app is at <http://localhost:8080> (with Python, see [Front-end](#front-end) to run it). Then
+open the interactive documentation at <http://localhost:8000/docs>, or look at the Madrid spring DST change of 2025
+hour by hour:
 
 ```bash
 curl "http://localhost:8000/api/v1/stations/juan-carlos-i/measurements?start=2025-03-30T00:00:00&end=2025-03-30T06:00:00&aggregation=hourly&types=temperature"
@@ -486,8 +487,8 @@ with Vite ([ADR-0012](docs/adr/0012-frontend-stack.md)). It shows the attributio
 in demo mode, a banner with the recorded period of each station, so the user knows which dates have data.
 
 The browser only talks to the origin that served the page and calls the API through relative URLs (`/api/...`). In
-development, the Vite dev server forwards them to the API on port 8000. The API therefore needs no CORS
-configuration, and the page can read every response header, such as `X-Request-ID`.
+development, the Vite dev server forwards them to the API on port 8000; in Docker, nginx does. The API therefore
+needs no CORS configuration, and the page can read every response header, such as `X-Request-ID`.
 
 To run it in development, start the API and the front-end in two terminals:
 
@@ -500,6 +501,18 @@ make front-dev       # terminal 2: open http://localhost:5173
 On Windows, run the front-end commands from PowerShell or Git Bash. In `cmd.exe`, a current directory written with
 a lower-case drive letter (`c:\...`) makes Vitest load itself twice, and every test file fails with "Vitest failed
 to find the current suite"; `cd /d C:\...` avoids it.
+
+In Docker Compose, the `web` service builds the app in a Node image and serves the result with nginx on port 8080
+([`frontend/Dockerfile`](frontend/Dockerfile), [`frontend/nginx.conf`](frontend/nginx.conf)). nginx runs as a
+non-root user, like the API, and starts once the API reports healthy. Its configuration:
+
+- forwards `/api/` to the `api` service, waiting up to five minutes for an answer: with an empty cache, a long range
+  is fetched from AEMET month by month, and nginx's default of 60 seconds would cut it;
+- caches the built scripts and styles for a year, since their names change with their content, and makes browsers
+  revalidate `index.html` on every visit, so a new deployment is picked up at once;
+- compresses scripts and styles (the API compresses its own JSON) and sends `X-Content-Type-Options` and
+  `Referrer-Policy` headers. A Content Security Policy is left for later: the charts set inline styles, so it needs
+  care.
 
 Styles are CSS Modules, one per component, sharing the colours and spacing defined as CSS custom properties in
 [`src/styles/global.css`](frontend/src/styles/global.css); the page follows the system's light or dark theme.
@@ -677,7 +690,7 @@ Run them from the repository root.
 | `make front-build` | `npm --prefix frontend run build` | Type-check and build the front-end for production into `frontend/dist` |
 | `make front-check` | The `front-lint`, `front-typecheck`, `front-types-check`, `front-test` and `front-build` commands above | Every front-end check |
 | `make check` | The `lint`, `typecheck`, `openapi-check` and `test` commands, then `make front-check` | Everything CI runs, backend and front-end |
-| `make up` | `docker compose up --build` | Build and start the Docker stack (demo mode by default) |
+| `make up` | `docker compose up --build` | Build and start the Docker stack: web app on port 8080, API on port 8000 (demo mode by default) |
 | `make down` | `docker compose down` | Stop the Docker stack. The cache volume is kept; `docker compose down -v` deletes it |
 
 ## Project status

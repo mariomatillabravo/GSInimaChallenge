@@ -20,5 +20,17 @@ services:
       - cache-data:/app/data
     restart: unless-stopped
 
+  # The web app: nginx serves the built front-end and forwards /api to the api service.
+  web:
+    build: ./frontend
+    image: aemet-antarctica-web
+    ports:
+      - "8080:8080"
+    # nginx looks up the api host name when it starts, so the API must be running (healthy) first.
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   cache-data:
