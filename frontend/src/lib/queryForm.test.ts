@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import { demoMeta, demoStations, realMeta, realStations } from "../test/fixtures";
-import { type FormValues, formFieldOf, initialValues, toQuery, validate } from "./queryForm";
+import {
+  type FormValues,
+  formFieldOf,
+  initialValues,
+  toQuery,
+  validate,
+  windMetricsAvailable,
+} from "./queryForm";
 
 const NOW = new Date("2026-11-16T10:20:00Z"); // 11:20 in Madrid
 
@@ -13,6 +20,7 @@ describe("initialValues", () => {
       end: "2025-04-01T00:00",
       aggregation: "hourly",
       types: ["temperature", "pressure", "speed"],
+      windMetrics: false,
     });
   });
 
@@ -58,6 +66,23 @@ describe("toQuery", () => {
         types: ["speed"],
       },
     });
+  });
+
+  it("asks for the wind-energy metrics only on aggregated levels", () => {
+    const values = { ...initialValues(demoMeta, demoStations, NOW), windMetrics: true };
+
+    expect(toQuery(values).params.metrics).toBe("extended");
+    expect(toQuery({ ...values, aggregation: "daily" }).params.metrics).toBe("extended");
+    expect(toQuery({ ...values, aggregation: "none" }).params.metrics).toBeUndefined();
+    expect(toQuery({ ...values, windMetrics: false }).params.metrics).toBeUndefined();
+  });
+});
+
+describe("windMetricsAvailable", () => {
+  it("is false only for raw ten-minute records", () => {
+    expect(windMetricsAvailable("none")).toBe(false);
+    expect(windMetricsAvailable("hourly")).toBe(true);
+    expect(windMetricsAvailable("monthly")).toBe(true);
   });
 });
 

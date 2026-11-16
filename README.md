@@ -581,6 +581,10 @@ the maximum range of each aggregation level come from `/api/v1/meta`.
 It starts on a query that returns data: in demo mode, hourly means of the last two recorded days, which cover the
 change to summer time on 30 March 2025; with real data, the last seven days.
 
+A **Wind-energy metrics** option asks for the [wind-energy metrics](#wind-energy-metrics). It is disabled for
+ten-minute records, which the API rejects with that parameter, and the table and the CSV show the metrics like any
+other column, since both are built from the response's `fields`.
+
 Before sending, the form checks that the end is later than the start and that the range is not too long for the
 aggregation level, with one hour of margin: across a daylight saving time change the real duration, which the API
 measures, differs from the calendar difference by up to an hour (see [Maximum range](#measurement-parameters)). The
@@ -594,9 +598,10 @@ when the range has no data.
 ### Charts
 
 Below the summary, one chart per requested measurement shows it over time, all stacked on the same time axis, each
-with its own scale ([ADR-0015](docs/adr/0015-charts.md)). Moving the cursor over one chart shows the reading at that
-moment on all of them: the value with its unit, the datetime with its UTC offset and, for aggregated rows, samples
-and coverage.
+with its own scale ([ADR-0015](docs/adr/0015-charts.md)). With the wind-energy metrics, a chart of wind power
+density follows; the other metrics stay in the table, so the page does not turn into a wall of charts. Moving the
+cursor over one chart shows the reading at that moment on all of them: the value with its unit, the datetime with
+its UTC offset and, for aggregated rows, samples and coverage.
 
 The time axis is real time: each row sits at its instant, read from the API's datetime and its offset, not at its
 position in the list. On the day summer time starts, the default demo query shows it: the 00:00 and 12:00 ticks are

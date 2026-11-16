@@ -11,6 +11,7 @@ import {
   initialValues,
   toQuery,
   validate,
+  windMetricsAvailable,
 } from "../lib/queryForm";
 import styles from "./QueryForm.module.css";
 
@@ -79,6 +80,7 @@ export function QueryForm({ meta, stations, pending, fieldError, onSubmit }: Pro
   const end = message("end");
   const aggregation = message("aggregation");
   const types = message("types");
+  const metricsAvailable = windMetricsAvailable(values.aggregation);
   const maxRangeDays = meta.aggregations.find(
     (level) => level.id === values.aggregation,
   )?.max_range_days;
@@ -184,6 +186,28 @@ export function QueryForm({ meta, stations, pending, fieldError, onSubmit }: Pro
           ))}
           {types.element}
         </fieldset>
+
+        {meta.wind_metrics.length > 0 ? (
+          <div className={styles.field}>
+            <label className={styles.checkbox}>
+              <input
+                type="checkbox"
+                checked={values.windMetrics && metricsAvailable}
+                disabled={!metricsAvailable}
+                aria-describedby={`${id}-metrics-hint`}
+                onChange={(event) => {
+                  update({ windMetrics: event.target.checked });
+                }}
+              />
+              Wind-energy metrics
+            </label>
+            <p id={`${id}-metrics-hint`} className={styles.fieldHint}>
+              {metricsAvailable
+                ? "Cubic mean and maximum speed, temperature extremes, air density and power density, for the selected measurements."
+                : "Need hourly, daily or monthly means."}
+            </p>
+          </div>
+        ) : null}
       </div>
 
       <div className={styles.actions}>

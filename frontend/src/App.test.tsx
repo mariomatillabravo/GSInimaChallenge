@@ -5,7 +5,13 @@ import { describe, expect, it } from "vitest";
 import type { MeasurementsResponse } from "./api/client";
 import { App } from "./App";
 import { jsonResponse, stubFetch } from "./test/fetch";
-import { dailyMeasurements, demoMeta, demoStations, emptyMeasurements } from "./test/fixtures";
+import {
+  dailyMeasurements,
+  dailyWindMeasurements,
+  demoMeta,
+  demoStations,
+  emptyMeasurements,
+} from "./test/fixtures";
 import { renderWithQueryClient } from "./test/render";
 
 const MEASUREMENTS = "/api/v1/stations/juan-carlos-i/measurements";
@@ -166,6 +172,24 @@ describe("App", () => {
     expect(screen.getByRole("columnheader", { name: "Temperature (°C)" })).not.toHaveAttribute(
       "aria-sort",
     );
+  });
+
+  it("asks for the wind-energy metrics, which need an aggregation level", async () => {
+    const fake = serveDemo(() => jsonResponse(dailyWindMeasurements));
+    const { user } = await renderApp();
+    const option = screen.getByRole("checkbox", { name: "Wind-energy metrics" });
+
+    await user.selectOptions(screen.getByLabelText("Aggregation"), "none");
+    expect(option).toBeDisabled();
+    expect(option).toHaveAccessibleDescription("Need hourly, daily or monthly means.");
+
+    await user.selectOptions(screen.getByLabelText("Aggregation"), "daily");
+    await user.click(option);
+    await submit(user);
+
+    await screen.findByRole("table");
+    expect(measurementRequests(fake).at(-1)).toMatch(/&aggregation=daily&.*&metrics=extended$/);
+    expect(screen.getByRole("columnheader", { name: "Wind power density (W/m²)" })).toBeVisible();
   });
 
   it("shows the notice of a range without data", async () => {

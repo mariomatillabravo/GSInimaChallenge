@@ -9,6 +9,8 @@ export interface FormValues {
   end: string;
   aggregation: AggregationId;
   types: MeasurementTypeId[];
+  /** Ask for the wind-energy metrics; they only exist for aggregated levels. */
+  windMetrics: boolean;
 }
 
 export type FormField = "station" | "start" | "end" | "aggregation" | "types";
@@ -30,7 +32,13 @@ export function initialValues(meta: MetaResponse, stations: Station[], now: Date
     ...range,
     aggregation: "hourly",
     types: meta.measurement_types.map((type) => type.id),
+    windMetrics: false,
   };
+}
+
+/** Wind-energy metrics are statistics of a bucket: the API rejects them for raw records. */
+export function windMetricsAvailable(aggregation: AggregationId): boolean {
+  return aggregation !== "none";
 }
 
 /** Problems found before sending; the API still has the last word (see checkRange). */
@@ -58,6 +66,9 @@ export function toQuery(values: FormValues): SubmittedQuery {
       end: toApiDateTime(values.end),
       aggregation: values.aggregation,
       types: values.types,
+      // Left out (undefined) unless it applies, so the URL only carries it when it matters.
+      metrics:
+        values.windMetrics && windMetricsAvailable(values.aggregation) ? "extended" : undefined,
     },
   };
 }

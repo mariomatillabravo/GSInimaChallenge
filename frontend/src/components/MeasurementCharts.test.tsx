@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { MeasurementsResponse } from "../api/client";
-import { dailyMeasurements, demoMeta } from "../test/fixtures";
+import { dailyMeasurements, dailyWindMeasurements, demoMeta } from "../test/fixtures";
 import { MeasurementCharts } from "./MeasurementCharts";
 
 type Row = MeasurementsResponse["data"][number];
@@ -64,6 +64,18 @@ describe("MeasurementCharts", () => {
       "Speed (m/s)",
     ]);
     expect(charts.every((chart) => chart.querySelector("path.recharts-line-curve"))).toBe(true);
+  });
+
+  it("adds a chart of wind power density, and only that metric, when it was requested", () => {
+    renderCharts(dailyWindMeasurements);
+
+    const charts = within(screen.getByRole("region", { name: "Charts" })).getAllByRole("figure");
+    expect(charts.map((chart) => chart.querySelector("figcaption")?.textContent)).toEqual([
+      "Temperature (°C)",
+      "Pressure (hPa)",
+      "Speed (m/s)",
+      "Wind power density (W/m²)",
+    ]);
   });
 
   it("labels the time axis in Madrid time", () => {

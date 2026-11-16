@@ -23,6 +23,9 @@ import { AGGREGATION_LABELS } from "../lib/labels";
 import { ChartTooltip } from "./ChartTooltip";
 import styles from "./MeasurementCharts.module.css";
 
+/** Of the wind-energy metrics, only power density gets a chart; the table shows them all. */
+const CHARTED_METRICS: ReadonlySet<string> = new Set(["power_density"]);
+
 const CHART_HEIGHT = 180;
 /** The same for every chart, so their plot areas, and their time axes, line up. */
 const Y_AXIS_WIDTH = 56;
@@ -95,16 +98,20 @@ interface Props {
 }
 
 /**
- * One chart per measurement in the result, stacked, all on the same time axis (small
- * multiples): each keeps its own scale, so no chart needs a second axis.
+ * One chart per measurement in the result, plus wind power density when it was requested,
+ * stacked, all on the same time axis (small multiples): each keeps its own scale, so no chart
+ * needs a second axis.
  */
 export function MeasurementCharts({ result, meta }: Props) {
   const { metadata } = result;
   const points = chartPoints(result.data, metadata.aggregation);
   const first = points[0];
   const last = points.at(-1);
-  const measurements = meta.measurement_types.filter((type) => type.key in result.fields);
-  if (first === undefined || last === undefined || measurements.length === 0) {
+  const charted = [
+    ...meta.measurement_types,
+    ...meta.wind_metrics.filter((metric) => CHARTED_METRICS.has(metric.id)),
+  ].filter((series) => series.key in result.fields);
+  if (first === undefined || last === undefined || charted.length === 0) {
     return null;
   }
   const { ticks, unit } = timeTicks(first.x, last.x, meta.output_timezone);
@@ -126,13 +133,13 @@ export function MeasurementCharts({ result, meta }: Props) {
           points) would show the trend better.
         </p>
       )}
-      {measurements.map((type) => (
+      {charted.map((series) => (
         <MeasurementChart
-          key={type.key}
+          key={series.key}
           points={points}
-          measurementKey={type.key}
-          label={result.fields[type.key]?.label ?? type.label}
-          unit={type.unit}
+          measurementKey={series.key}
+          label={result.fields[series.key]?.label ?? series.label}
+          unit={series.unit}
           ticks={ticks}
           formatX={formatX}
         />
