@@ -1,0 +1,5 @@
+{
+  // Two separate programs: the browser application (src/) and the build tooling run by Node.
+  "files": [],
+  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }]
+}

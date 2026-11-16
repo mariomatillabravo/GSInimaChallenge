@@ -1,0 +1,4 @@
+# Generated files: npm and the build own their format.
+package-lock.json
+dist/
+coverage/
