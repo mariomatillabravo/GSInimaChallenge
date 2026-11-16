@@ -725,6 +725,16 @@ logged.
 The range limits keep every response bounded in size. A longer request is rejected with HTTP 422 and a message
 suggesting a shorter range or a coarser aggregation, instead of being paginated.
 
+### Tests and coverage
+
+Tests never call the real AEMET API: upstream answers are mocked or replayed from recorded responses. CI measures
+coverage while it runs them. The backend covers 98 % of its lines and branches, and CI fails below 95 %
+(`fail_under` in [`backend/pyproject.toml`](backend/pyproject.toml)), a margin that lets small refactors through
+while catching code added without tests. The front-end reports its coverage (99 % of lines, 93 % of branches)
+without a threshold. Both HTML reports can be downloaded from every CI run, as the `backend-coverage` and
+`frontend-coverage` artifacts. A percentage only says which lines ran, not whether a test would notice them break,
+so it complements the tests' assertions rather than replacing them.
+
 ### Commands
 
 Run them from the repository root.
@@ -735,6 +745,7 @@ Run them from the repository root.
 | `make run` | `uv run --directory backend uvicorn app.main:create_app --factory --reload` | Start the API with auto-reload on <http://localhost:8000> (interactive docs at `/docs`) |
 | `make demo` | Bash: `DEMO_MODE=true uv run --directory backend uvicorn app.main:create_app --factory --reload`<br>PowerShell: `$env:DEMO_MODE="true"; uv run --directory backend uvicorn app.main:create_app --factory --reload` | Same as `run`, in demo mode (recorded data, no API key needed) |
 | `make test` | `uv run --directory backend pytest` | Run the backend test suite |
+| `make coverage` | `uv run --directory backend pytest --cov --cov-report=term-missing --cov-report=html` | Run the backend tests measuring line and branch coverage; fails below 95 %. HTML report in `backend/htmlcov`. CI runs this instead of `make test` |
 | `make lint` | `uv run --directory backend ruff check .`<br>`uv run --directory backend ruff format --check .` | Check backend linting and formatting without changing files |
 | `make format` | `uv run --directory backend ruff check --fix --exit-zero .`<br>`uv run --directory backend ruff format .` | Apply safe lint fixes, then format the backend code (remaining lint issues are reported by `make lint`) |
 | `make typecheck` | `uv run --directory backend mypy` | Backend static type checking in strict mode |
@@ -743,13 +754,14 @@ Run them from the repository root.
 | `make front-install` | `npm --prefix frontend ci` | Install front-end dependencies exactly as pinned in `package-lock.json` |
 | `make front-dev` | `npm --prefix frontend run dev` | Start the front-end dev server on <http://localhost:5173>, forwarding `/api` to port 8000 |
 | `make front-test` | `npm --prefix frontend test` | Run the front-end test suite (Vitest) |
+| `make front-coverage` | `npm --prefix frontend run coverage` | Run the front-end tests with a coverage report, without a threshold. HTML report in `frontend/coverage`. CI runs this instead of `make front-test` |
 | `make front-lint` | `npm --prefix frontend run lint` | Check front-end linting (ESLint) and formatting (Prettier) without changing files |
 | `make front-format` | `npm --prefix frontend run format` | Apply lint fixes, then format the front-end code |
 | `make front-typecheck` | `npm --prefix frontend run typecheck` | Front-end static type checking (`tsc -b`) |
 | `make front-types-check` | `npm --prefix frontend run check:api` | Fail if the front-end API types no longer match `frontend/openapi.json` |
 | `make front-build` | `npm --prefix frontend run build` | Type-check and build the front-end for production into `frontend/dist` |
 | `make front-check` | The `front-lint`, `front-typecheck`, `front-types-check`, `front-test` and `front-build` commands above | Every front-end check |
-| `make check` | The `lint`, `typecheck`, `openapi-check` and `test` commands, then `make front-check` | Everything CI runs, backend and front-end |
+| `make check` | The `lint`, `typecheck`, `openapi-check` and `test` commands, then `make front-check` | The checks CI runs, backend and front-end (CI also measures coverage) |
 | `make up` | `docker compose up --build` | Build and start the Docker stack: web app on port 8080, API on port 8000 (demo mode by default) |
 | `make down` | `docker compose down` | Stop the Docker stack. The cache volume is kept; `docker compose down -v` deletes it |
 

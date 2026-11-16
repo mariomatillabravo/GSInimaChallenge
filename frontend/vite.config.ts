@@ -16,5 +16,15 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.ts"],
     // Undo vi.stubGlobal (used to replace fetch) after every test.
     unstubGlobals: true,
+    // The first test that shows a result loads the charts' chunk (Recharts), which jsdom and the
+    // transform take a few seconds to import; the 5-second default made it fail on a busy machine.
+    testTimeout: 15_000,
+    // `npm run coverage`: a report without a threshold (the backend has one).
+    coverage: {
+      provider: "v8",
+      reporter: ["text-summary", "html"],
+      include: ["src/**/*.{ts,tsx}"],
+      exclude: ["src/**/*.test.{ts,tsx}", "src/test/**", "src/api/schema.d.ts", "src/main.tsx"],
+    },
   },
 });

@@ -44,8 +44,17 @@ jobs:
       - name: OpenAPI document up to date
         run: make openapi-check
 
-      - name: Tests
-        run: make test
+      # The tests run once, measuring coverage; the job fails below fail_under (pyproject.toml).
+      - name: Tests with coverage
+        run: make coverage
+
+      - name: Upload the coverage report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: backend-coverage
+          path: backend/htmlcov/
+          retention-days: 14
 
   frontend:
     name: Front-end (lint, type-check, tests, build)
@@ -60,6 +69,9 @@ jobs:
         uses: actions/setup-node@v7.1.0
         with:
           node-version-file: frontend/.nvmrc
+          # Reuses npm's download cache while package-lock.json does not change.
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install dependencies
         run: make front-install
@@ -73,8 +85,17 @@ jobs:
       - name: API types up to date
         run: make front-types-check
 
-      - name: Tests
-        run: make front-test
+      # A coverage report without a threshold; the backend job enforces one.
+      - name: Tests with coverage
+        run: make front-coverage
+
+      - name: Upload the coverage report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/
+          retention-days: 14
 
       - name: Production build
         run: make front-build

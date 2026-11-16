@@ -23,6 +23,7 @@ dev = [
     "mypy>=2.4.1",
     "pandas-stubs>=3.1.0.261029",
     "pytest>=9.2.0",
+    "pytest-cov>=7.1.0",
     "respx>=0.23.1",
     "ruff>=0.17.5",
 ]
@@ -68,3 +69,18 @@ testpaths = ["tests"]
 pythonpath = ["."]
 addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
 filterwarnings = ["error"]
+
+# ---------------------------------------------------------------------------
+# Coverage (make coverage; CI fails below fail_under)
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+source = ["app"]
+branch = true  # both outcomes of every condition, not only the lines
+
+[tool.coverage.report]
+fail_under = 95  # measured 98 % (lines and branches); the margin absorbs small refactors
+show_missing = true
+skip_covered = true
+
+[tool.coverage.html]
+directory = "htmlcov"

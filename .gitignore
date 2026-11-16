@@ -41,6 +41,7 @@ ENV/
 .coverage.*
 coverage.xml
 htmlcov/
+coverage/
 *.cover
 
 # Jupyter

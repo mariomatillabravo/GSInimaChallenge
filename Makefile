@@ -6,8 +6,8 @@ BACKEND_RUN := uv run --directory backend
 FRONTEND_NPM := npm --prefix frontend
 
 .DEFAULT_GOAL := help
-.PHONY: help install run demo test lint format typecheck openapi-check api-types check up down \
-	front-install front-dev front-test front-lint front-format front-typecheck front-types-check \
+.PHONY: help install run demo test coverage lint format typecheck openapi-check api-types check up down \
+	front-install front-dev front-test front-coverage front-lint front-format front-typecheck front-types-check \
 	front-build front-check
 
 help:
@@ -16,6 +16,7 @@ help:
 	@echo "  run               Start the API with auto-reload on http://localhost:8000"
 	@echo "  demo              Start the API in demo mode (recorded data, no API key needed)"
 	@echo "  test              Run the backend test suite"
+	@echo "  coverage          Run the backend tests with coverage (fails below 95 %), HTML in backend/htmlcov"
 	@echo "  lint              Check backend linting and formatting"
 	@echo "  format            Apply safe lint fixes and format the backend code"
 	@echo "  typecheck         Run backend static type checking"
@@ -24,6 +25,7 @@ help:
 	@echo "  front-install     Install front-end dependencies from the lockfile"
 	@echo "  front-dev         Start the front-end dev server on http://localhost:5173"
 	@echo "  front-test        Run the front-end test suite"
+	@echo "  front-coverage    Run the front-end tests with a coverage report, HTML in frontend/coverage"
 	@echo "  front-lint        Check front-end linting and formatting"
 	@echo "  front-format      Apply lint fixes and format the front-end code"
 	@echo "  front-typecheck   Run front-end static type checking"
@@ -31,7 +33,7 @@ help:
 	@echo "  front-build       Build the front-end for production into frontend/dist"
 	@echo "  front-check       Run every front-end check, then the production build"
 	@echo "  check             Run every backend and front-end check (what CI runs)"
-	@echo "  up                Build and start the Docker stack (demo mode by default)"
+	@echo "  up                Build and start the Docker stack: web on :8080, API on :8000 (demo mode)"
 	@echo "  down              Stop the Docker stack"
 
 install:
@@ -45,6 +47,9 @@ demo:
 
 test:
 	$(BACKEND_RUN) pytest
+
+coverage:
+	$(BACKEND_RUN) pytest --cov --cov-report=term-missing --cov-report=html
 
 lint:
 	$(BACKEND_RUN) ruff check .
@@ -74,6 +79,9 @@ front-dev:
 
 front-test:
 	$(FRONTEND_NPM) test
+
+front-coverage:
+	$(FRONTEND_NPM) run coverage
 
 front-lint:
 	$(FRONTEND_NPM) run lint
