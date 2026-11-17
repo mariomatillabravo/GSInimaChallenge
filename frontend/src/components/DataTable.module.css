@@ -36,6 +36,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+.sortButton:hover,
+.table th[aria-sort] .sortButton {
+  color: var(--color-accent);
+}
+
 .sortButton {
   display: inline-flex;
   gap: var(--space-1);
@@ -77,6 +82,10 @@
   color: inherit;
   font: inherit;
   cursor: pointer;
+}
+
+.pages button:hover:enabled {
+  border-color: var(--color-accent);
 }
 
 .pages button:disabled {

@@ -49,7 +49,7 @@
 }
 
 .figure :global(.recharts-tooltip-cursor) {
-  stroke: var(--color-text-muted);
+  stroke: var(--color-accent);
 }
 
 .tooltip {

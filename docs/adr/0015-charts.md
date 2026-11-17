@@ -58,8 +58,9 @@ browser (downsampling, which silently hides data).
   stay under that number and accepts the range. It is text only; the chart still draws every point.
 - **Tooltip**: the value with its unit first, then the row's datetime as the API wrote it (with its offset) and, for
   aggregated rows, samples and coverage.
-- **Colours** come from CSS custom properties, one line colour validated for contrast and lightness against each
-  theme's surface. CSS rules on Recharts' class names override the colours Recharts writes as SVG attributes.
+- **Colours** come from CSS custom properties: the lines are Neon Jade on the Sapphire background (contrast 6.8:1).
+  A palette validator flags its lightness as outside the band it uses to balance several series against each other;
+  with one series per chart, the contrast is what matters. CSS rules on Recharts' class names override the colours Recharts writes as SVG attributes.
 - **Loaded on demand**: the charts and Recharts are a separate chunk, fetched with the first result (`React.lazy`
   and a dynamic import). An error boundary replaces them with a message if that chunk cannot be loaded, so the
   summary and the table keep working.

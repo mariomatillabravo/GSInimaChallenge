@@ -8,3 +8,7 @@
   font: inherit;
   cursor: pointer;
 }
+
+.reveal:hover {
+  border-color: var(--color-accent);
+}

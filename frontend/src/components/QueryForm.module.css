@@ -29,7 +29,14 @@
   padding: var(--space-1) var(--space-2);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
+  background: var(--color-input);
+  color: var(--color-text);
   font: inherit;
+}
+
+.field select:hover,
+.field input:hover {
+  border-color: var(--color-accent);
 }
 
 .field [aria-invalid="true"] {
@@ -76,8 +83,8 @@
   padding: var(--space-2) var(--space-4);
   border: 0;
   border-radius: var(--radius);
-  background: var(--color-accent);
-  color: var(--color-on-accent);
+  background: var(--color-highlight);
+  color: var(--color-on-highlight);
   font: inherit;
   font-weight: 600;
   cursor: pointer;

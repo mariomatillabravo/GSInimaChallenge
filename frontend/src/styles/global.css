@@ -1,22 +1,29 @@
 /* Design tokens shared by every CSS Module, and the base styles of plain elements. */
 
 :root {
-  /* Native controls (date inputs, scrollbars) follow the light or dark theme of the system. */
-  color-scheme: light dark;
+  /*
+   * One theme: white text on Sapphire Blue, Ocean Cyan for interactive states (focus, hover,
+   * the charts' cursor) and Neon Jade for the few highlights (chart lines, the main button,
+   * checked boxes). Every text pair reaches 4.5:1 and every line or border 3:1 (WCAG).
+   */
+  /* Native controls (date inputs, select lists, scrollbars) are drawn for a dark background. */
+  color-scheme: dark;
 
-  --color-bg: #ffffff;
-  --color-surface: #f5f7fa;
-  --color-text: #1b1f24;
-  --color-text-muted: #57606a;
-  --color-border: #d0d7de;
-  --color-accent: #0b5cad;
-  --color-notice-bg: #fff8c5;
-  --color-notice-border: #d4a72c;
-  --color-danger: #cf222e;
-  --color-danger-bg: #ffebe9;
-  --color-on-accent: #ffffff;
-  /* Validated for charts against the light surface (lightness band, chroma, 3:1 contrast). */
-  --color-chart-line: #0b5cad;
+  --color-bg: #0042ac; /* Sapphire Blue */
+  --color-surface: #00337f; /* panels: form, table header, footer */
+  --color-input: #00296a; /* fields: 13.8:1 with white text */
+  --color-text: #ffffff; /* 8.8:1 on the background */
+  --color-text-muted: #c9d8f8; /* 6.2:1 on the background */
+  --color-border: #6e95e0; /* 4.6:1 against a field */
+  --color-accent: #00b3fb; /* Ocean Cyan: focus, hover, cursor (3.7:1, lines only) */
+  --color-link: #8fddff; /* a lighter cyan, for text: 5.9:1 */
+  --color-highlight: #83fb80; /* Neon Jade: 6.8:1 on the background */
+  --color-on-highlight: #0042ac; /* text on Neon Jade: 6.8:1 */
+  --color-notice-bg: #00337f;
+  --color-notice-border: #ffd166; /* amber, 6.1:1 on the background */
+  --color-danger: #ffb0b0; /* readable red on blue: 5.1:1 */
+  --color-danger-bg: #4a1238;
+  --color-chart-line: #83fb80;
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -30,24 +37,8 @@
   line-height: 1.5;
   color: var(--color-text);
   background: var(--color-bg);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-bg: #0d1117;
-    --color-surface: #161b22;
-    --color-text: #e6edf3;
-    --color-text-muted: #9198a1;
-    --color-border: #30363d;
-    --color-accent: #58a6ff;
-    --color-notice-bg: #2e2a16;
-    --color-notice-border: #9e6a03;
-    --color-danger: #f85149;
-    --color-danger-bg: #3c1618;
-    --color-on-accent: #0d1117;
-    /* The dark accent is too light for a chart line on this surface; one step darker. */
-    --color-chart-line: #3987e5;
-  }
+  /* Checkboxes in Neon Jade. */
+  accent-color: var(--color-highlight);
 }
 
 *,
@@ -61,7 +52,12 @@ body {
 }
 
 a {
-  color: var(--color-accent);
+  color: var(--color-link);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 /* Read by screen readers, invisible on screen. A plain class, shared by every component. */

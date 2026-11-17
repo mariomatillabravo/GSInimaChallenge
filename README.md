@@ -658,7 +658,11 @@ non-root user, like the API, and starts once the API reports healthy. Its config
   care.
 
 Styles are CSS Modules, one per component, sharing the colours and spacing defined as CSS custom properties in
-[`src/styles/global.css`](frontend/src/styles/global.css); the page follows the system's light or dark theme.
+[`src/styles/global.css`](frontend/src/styles/global.css). The page has one colour scheme: white text on Sapphire
+Blue (`#0042AC`), Ocean Cyan (`#00B3FB`) for interactive states such as focus, hover and the charts' cursor, and Neon
+Jade (`#83FB80`) for a few highlights: the chart lines, the main button and checked boxes. Every text reaches a
+contrast of 4.5:1 with its background and every line or border 3:1, the WCAG minimums; a lighter cyan is used for
+links and a light red for errors, because the plain cyan and the usual red do not reach them on blue.
 
 ### The query form
 

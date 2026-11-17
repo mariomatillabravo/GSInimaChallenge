@@ -65,8 +65,9 @@ already uses TypeScript 7 with oxlint instead of ESLint.
   resolves `localhost` to the IPv6 address `::1` first (verified on Windows), where uvicorn does not listen by
   default, and the explicit address avoids depending on the fallback to IPv4. In Docker Compose, nginx serves the
   built app and forwards `/api/` to the `api` service in the same way.
-- **CSS Modules** with tokens in `src/styles/global.css` and a light and a dark theme that follow the system
-  setting.
+- **CSS Modules** with tokens in `src/styles/global.css`. The first version had a light and a dark theme that
+  followed the system setting; it was replaced by a single colour scheme (Sapphire Blue background, Ocean Cyan for
+  interactive states, Neon Jade highlights), with every text and line checked against the WCAG contrast minimums.
 - **Node.js 26** (LTS since October 2026), pinned by major version in `frontend/.nvmrc` and `engines`, and npm with
   a committed `package-lock.json` installed through `npm ci`.
 
