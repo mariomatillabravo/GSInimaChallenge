@@ -181,6 +181,9 @@ from 18.5 KB to 1.5 KB.
 | `metrics` | no | `extended` adds [wind-energy metrics](#wind-energy-metrics) to hourly, daily and monthly rows |
 | `format` | no | `json` (default) or `csv` |
 
+The values of `aggregation`, `types`, `metrics` and `format` are accepted in any letter case (`Hourly`, `CSV`);
+responses always use the lower-case form.
+
 **Maximum range.** Each aggregation level accepts a maximum range (`MAX_RANGE_DAYS_*` in
 [Configuration](#configuration), also returned by `/api/v1/meta`); a longer one gets a 422 that suggests a coarser
 aggregation. The length is the real time elapsed between `start` and `end`, not the difference between their

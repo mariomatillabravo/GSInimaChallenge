@@ -1,15 +1,15 @@
 """Response schemas: the public contract of the API, also used to generate the OpenAPI document."""
 
-from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.domain.enums import CaseInsensitiveStrEnum
 from app.domain.measurements import Aggregation, MeasurementType
 from app.domain.wind import WindMetric
 
 
-class OutputFormat(StrEnum):
+class OutputFormat(CaseInsensitiveStrEnum):
     JSON = "json"
     CSV = "csv"
 

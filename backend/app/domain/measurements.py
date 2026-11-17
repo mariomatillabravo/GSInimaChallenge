@@ -8,9 +8,10 @@ from types import MappingProxyType
 from typing import Final
 
 from app.core.exceptions import InvalidParameterError
+from app.domain.enums import CaseInsensitiveStrEnum
 
 
-class Aggregation(StrEnum):
+class Aggregation(CaseInsensitiveStrEnum):
     """Time aggregation requested by the client. ``NONE`` returns the raw 10-minute records."""
 
     NONE = "none"

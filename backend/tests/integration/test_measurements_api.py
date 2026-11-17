@@ -211,6 +211,44 @@ class TestRawSeries:
         assert response.json()["metadata"]["count"] == 1
 
 
+class TestLetterCase:
+    """``aggregation``, ``metrics`` and ``format`` accept any letter case, like ``types``."""
+
+    def test_values_in_any_case_are_accepted_and_answered_in_lower_case(
+        self, api: TestClient, source: FakeWeatherSource
+    ) -> None:
+        source.observations = grid("2026-01-15T03:00:00", 6)
+
+        body = get_ok(
+            api,
+            start="2026-01-15T03:00:00Z",
+            end="2026-01-15T03:50:00Z",
+            aggregation="Hourly",
+            metrics="EXTENDED",
+            types="Speed",
+        )
+
+        assert body["metadata"]["aggregation"] == "hourly"
+        assert "speed_cubic_mean_ms" in body["data"][0]
+
+    def test_format_in_upper_case_returns_csv(
+        self, api: TestClient, source: FakeWeatherSource
+    ) -> None:
+        source.observations = grid("2026-01-15T03:00:00", 6)
+
+        response = api.get(
+            URL,
+            params={
+                "start": "2026-01-15T03:00:00Z",
+                "end": "2026-01-15T03:50:00Z",
+                "format": "CSV",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "text/csv; charset=utf-8"
+
+
 class TestEmptyResults:
     def test_empty_aemet_result_explains_the_seasonal_campaigns(
         self, settings: Settings, source: FakeWeatherSource, make_service: ServiceFactory

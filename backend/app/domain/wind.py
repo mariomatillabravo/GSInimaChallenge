@@ -13,6 +13,7 @@ from types import MappingProxyType
 from typing import Final
 
 from app.core.exceptions import InvalidParameterError
+from app.domain.enums import CaseInsensitiveStrEnum
 from app.domain.measurements import Aggregation, MeasurementType
 
 DRY_AIR_GAS_CONSTANT: Final = 287.05
@@ -21,7 +22,7 @@ CELSIUS_TO_KELVIN: Final = 273.15
 PASCALS_PER_HECTOPASCAL: Final = 100.0
 
 
-class MetricSet(StrEnum):
+class MetricSet(CaseInsensitiveStrEnum):
     """Values of the ``metrics`` parameter."""
 
     EXTENDED = "extended"
