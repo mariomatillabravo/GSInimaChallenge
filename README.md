@@ -722,6 +722,10 @@ range of each aggregation level keeps a response under about 9,000 rows (a year 
 sorts in an instant but would render slowly all at once (see [Limits and scaling](#limits-and-scaling)). A new
 result starts on the first page, in the API's order.
 
+When a range has no data at all, as with real data outside the stations' summer campaigns, the summary shows the
+API's notice and the empty charts and table are left out; a button such as **Show the 169 empty hours** brings the
+table back for whoever wants to see the empty buckets. A range with some data keeps every gap visible.
+
 A `coverage` below 90 % is marked with ⚠, and in words for screen readers: the bucket has fewer observations than
 a complete one, so its means are less representative (see [Data quality fields](#data-quality-fields)). The first
 and last buckets show it when the range starts or ends partway through them; the default demo query, for example,

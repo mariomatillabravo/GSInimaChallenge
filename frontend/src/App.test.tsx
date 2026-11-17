@@ -192,13 +192,19 @@ describe("App", () => {
     expect(screen.getByRole("columnheader", { name: "Wind power density (W/m²)" })).toBeVisible();
   });
 
-  it("shows the notice of a range without data", async () => {
+  it("shows only the notice for a range without data, with the empty rows one click away", async () => {
     serveDemo(() => jsonResponse(emptyMeasurements));
     const { user } = await renderApp();
 
     await submit(user);
 
     expect(await screen.findByText(/^Demo mode: there is no recorded data/)).toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Charts" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show the 2 empty days" }));
+
+    expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(3);
   });
 
   it("warns when part of the data is a stale copy", async () => {
