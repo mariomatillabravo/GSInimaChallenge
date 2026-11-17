@@ -1,6 +1,6 @@
 [project]
 name = "aemet-antarctica-api"
-version = "1.0.0"
+version = "1.1.0"
 description = "Web API that retrieves, caches and aggregates Antarctic weather data from AEMET OpenData."
 requires-python = ">=3.12"
 dependencies = [
