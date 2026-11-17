@@ -76,6 +76,13 @@ returns an empty result with a notice; `GET /api/v1/stations` shows the exact re
 2. Copy `backend/.env.example` to `backend/.env` and set `DEMO_MODE=false` and `AEMET_API_KEY=<your key>`.
 3. Run `make run`, or with Docker `DEMO_MODE=false docker compose up --build`
    (PowerShell: `$env:DEMO_MODE="false"; docker compose up --build`).
+4. Check the mode: `GET /api/v1/meta` returns `"source": "aemet"`, and the web app no longer shows the demo banner.
+
+With Docker, `DEMO_MODE` comes from the command line, not from `backend/.env`: Docker Compose sets it to `true`
+unless the shell says otherwise, while the API key is still read from `backend/.env`. In PowerShell the variable
+lasts until the window is closed, and `Remove-Item Env:DEMO_MODE` goes back to the demo. The stations report mostly
+during the austral summer campaigns (roughly November to March), so a recent range may have no data, which the app
+says; January 2026, for example, has data.
 
 ## Architecture
 
